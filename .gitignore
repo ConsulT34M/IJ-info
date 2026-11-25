@@ -5,6 +5,9 @@ seed/people.json
 samples/images/*.jpg
 samples/images/not_an_image.png
 
+# 진단 정답지 등 저장소에 올리지 않는 문서 (각자 로컬에만 둔다)
+private/
+
 # 시크릿·업로드·세션·샘플 이미지(tools/make_sample_images.py 출력)
 instance/
 .env
