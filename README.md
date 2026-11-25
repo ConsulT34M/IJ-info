@@ -296,6 +296,7 @@ $env:EKYC_API_KEY = "..."; $env:EKYC_HMAC_SECRET = "..."
 |---|---|---|
 | **회사 홈페이지** (공개) | `/` | 바로 열린다 |
 | 공지사항 | `/notices`, `/notices/<번호>` | 검색어(`?q=`)·페이지(`?page=`) 파라미터가 있다 |
+| **자료실** | `/library`, `/library/download` | 공개 문서 목록·검색·내려받기. DB를 쓰는 검색이다 |
 | 고객지원·문의 폼 | `/support` | CSRF 토큰이 있는 POST 폼 |
 | 개인정보 처리방침 | `/privacy` | 구현된 보유기간·안전조치와 내용을 맞췄다 |
 | 실습 안내 | `/demo` | 진단 대상 목록과 시작 방법 |
@@ -491,10 +492,10 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 │  └─ cli.py                flask seed / create-client / create-admin / purge / expire
 ├─ carrier/                 모의 통신사: 별도 Flask 앱 + SQLite + 자체 서명 TLS(8443)
 ├─ migrations/              Alembic 마이그레이션
-├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개)
+├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개 + 자료실 공개 문서)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (456개)
+├─ tests/                   pytest (491개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
@@ -552,6 +553,9 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 | + | 회사 홈페이지(공개 화면) — 진단용 공개 노출면 | 완료 |
 | + | IA-21·22 — 위탁사가 화면을 만드는 서버 간 경로(`mode: DIRECT`) | 완료 |
 
+- 플래그는 **9개**다. 14장의 6개(`W08`·`W09`·`W10`·`W14`·`W17`·`C10`)에 더해,
+  홈페이지 자료실·문의에서 웹 점검 항목을 재현하는 3개가 있다(D90):
+  `VULN_W01`(SQL 인젝션) · `VULN_W02`(저장형 XSS) · `VULN_W05`(다운로드 경로 조작).
 - **모든 `VULN_*` 플래그는 기본 `False`** 다. 플래그마다 "기본값에서는 막힌다 / 켜면 뚫린다"
   테스트 쌍이 있고(`tests/test_vuln_flags.py`), 넘지 말아야 하는 선도 함께 고정했다
   (예: `VULN_W09`를 켜도 X-01 CI 대조 통과는 항상 요구한다).

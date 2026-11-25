@@ -1,0 +1,58 @@
+{% extends "site/base.html" %}
+{% block title %}자료실{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="wrap">
+    <p class="crumb">홈 · 자료실</p>
+    <h1>자료실</h1>
+    <p>연동 규격서와 서비스 안내 문서를 내려받으실 수 있습니다. 전부 공개 문서입니다.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap">
+    <form class="searchbar" method="get" action="{{ url_for('site.library') }}">
+      <input type="text" name="q" value="{{ keyword }}" placeholder="제목·설명 검색" maxlength="60" aria-label="자료실 검색">
+      <button class="btn btn-ghost btn-sm" type="submit">검색</button>
+      {% if keyword %}
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('site.library') }}">초기화</a>
+      {% endif %}
+    </form>
+
+    {% if keyword %}
+    <p class="crumb">&ldquo;{{ keyword }}&rdquo; 검색 결과 {{ documents | length }}건</p>
+    {% else %}
+    <p class="crumb">전체 {{ documents | length }}건</p>
+    {% endif %}
+
+    {% if documents %}
+    <table class="table-plain">
+      <thead>
+        <tr><th>자료</th><th>설명</th><th>등록일</th><th>내려받기</th></tr>
+      </thead>
+      <tbody>
+        {% for document in documents %}
+        <tr>
+          <td>
+            <span class="badge">{{ document.category }}</span>
+            <strong>{{ document.title }}</strong>
+          </td>
+          <td>{{ document.summary }}</td>
+          <td class="d">{{ document.published_on }}</td>
+          <td>
+            <a class="btn btn-ghost btn-sm"
+               href="{{ url_for('site.library_download', doc=document.id) }}">
+              내려받기 ({{ (document.size_bytes / 1024) | round(1) }} KB)
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">검색 결과가 없습니다. 다른 검색어로 찾아 주세요.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

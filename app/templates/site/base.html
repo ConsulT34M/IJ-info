@@ -44,6 +44,7 @@
       <a href="{{ url_for('site.about') }}" class="{{ 'on' if active == 'about' }}">회사소개</a>
       <a href="{{ url_for('site.services') }}" class="{{ 'on' if active == 'services' }}">서비스</a>
       <a href="{{ url_for('site.notices') }}" class="{{ 'on' if active == 'notices' }}">공지사항</a>
+      <a href="{{ url_for('site.library') }}" class="{{ 'on' if active == 'library' }}">자료실</a>
       <a href="{{ url_for('site.support') }}" class="{{ 'on' if active == 'support' }}">고객지원</a>
       <a href="{{ url_for('site.demo') }}" class="{{ 'on' if active == 'demo' }}">실습 안내</a>
     </nav>
@@ -74,6 +75,7 @@
           <li><a href="{{ url_for('site.about') }}">회사소개</a></li>
           <li><a href="{{ url_for('site.services') }}">서비스</a></li>
           <li><a href="{{ url_for('site.notices') }}">공지사항</a></li>
+          <li><a href="{{ url_for('site.library') }}">자료실</a></li>
           <li><a href="{{ url_for('site.privacy') }}">개인정보 처리방침</a></li>
         </ul>
       </div>

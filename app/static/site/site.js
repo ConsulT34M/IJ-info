@@ -45,16 +45,23 @@
 
     Array.prototype.forEach.call(targets, function (el) { el.classList.add("reveal"); });
 
+    // 내려갈 때만이 아니라 **다시 올라올 때도** 움직이게 한다.
+    // 그래서 관찰을 끊지 않고, 화면을 벗어나면 다시 숨긴 상태로 되돌린다.
     var observer = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
         var el = entry.target;
-        el.style.transitionDelay = stagger(el) + "ms";
-        el.classList.add("is-in");
-        if (el.classList.contains("stat")) countUp(el);
-        observer.unobserve(el);
+        if (entry.isIntersecting) {
+          el.style.transitionDelay = stagger(el) + "ms";
+          el.classList.add("is-in");
+          if (el.classList.contains("stat")) countUp(el);
+          return;
+        }
+        // 위로 벗어났는지 아래로 벗어났는지에 따라 들어올 방향을 바꾼다
+        el.classList.toggle("from-above", entry.boundingClientRect.top < 0);
+        el.style.transitionDelay = "0ms";
+        el.classList.remove("is-in");
       });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    }, { rootMargin: "-4% 0px -8% 0px", threshold: 0.08 });
 
     Array.prototype.forEach.call(targets, function (el) { observer.observe(el); });
   }

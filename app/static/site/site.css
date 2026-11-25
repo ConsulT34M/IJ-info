@@ -501,6 +501,8 @@ textarea { min-height: 150px; resize: vertical; }
               transform .55s cubic-bezier(.22, .61, .36, 1);
   will-change: opacity, transform;
 }
+/* 위쪽으로 벗어난 요소는 다시 올라올 때 위에서 내려오게 한다 */
+.js .reveal.from-above { transform: translateY(-18px); }
 .js .reveal.is-in { opacity: 1; transform: none; }
 
 /* 히어로는 들어오자마자 시간차로 올라온다 */

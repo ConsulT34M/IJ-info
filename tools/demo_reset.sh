@@ -76,6 +76,7 @@ fi
 
 step "A사 적재 (시크릿 + 진위확인 대장 + 테스트 수신함)"
 $FLASK seed | head -n 3
+$FLASK seed-library | tail -n 1
 
 step "모의 통신사"
 if [ ! -f carrier/certs/carrier.crt ]; then

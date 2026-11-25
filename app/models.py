@@ -446,3 +446,60 @@ class MockMoisRegistry(db.Model):
         sa.CheckConstraint(_in_list("status", MOIS_STATUSES), name="ck_mock_mois_status"),
         sa.Index("ix_mock_mois_lookup", "name", "rrn_hash", "issue_date"),
     )
+
+
+# --------------------------------------------------------------------------
+# 회사 홈페이지(공개 화면)용. 인증 흐름과 무관하고 개인정보 흐름에도 들어가지 않는다.
+# 문의는 담당자 연락처 수준만 받고, 자료실은 공개 문서만 다룬다(D90).
+# --------------------------------------------------------------------------
+
+INQUIRY_STATUSES = ("RECEIVED", "ANSWERED")
+
+
+class SiteInquiry(db.Model):
+    """홈페이지 문의. 관리자 콘솔에서 읽고 답변한다."""
+
+    __tablename__ = "site_inquiries"
+
+    id: Mapped[int] = mapped_column(BIG_INT_PK, primary_key=True, autoincrement=True)
+    receipt_no: Mapped[str] = mapped_column(sa.String(24), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(sa.String(30), nullable=False)
+    company: Mapped[str] = mapped_column(sa.String(80), nullable=False)
+    manager: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+    email: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    message: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    status: Mapped[str] = mapped_column(sa.String(10), nullable=False, default="RECEIVED")
+    answer: Mapped[str | None] = mapped_column(sa.Text)
+    answered_at: Mapped[datetime | None] = mapped_column(sa.DateTime)
+    ip: Mapped[str] = mapped_column(sa.String(45), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=now_utc)
+
+    __table_args__ = (
+        sa.CheckConstraint(_in_list("status", INQUIRY_STATUSES), name="ck_site_inquiries_status"),
+        sa.Index("ix_site_inquiries_created", "created_at"),
+    )
+
+
+class SiteDocument(db.Model):
+    """자료실 공개 문서. 파일 자체는 samples/library/ 에 둔다."""
+
+    __tablename__ = "site_documents"
+
+    id: Mapped[int] = mapped_column(BIG_INT_PK, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    summary: Mapped[str] = mapped_column(sa.String(300), nullable=False, default="")
+    category: Mapped[str] = mapped_column(sa.String(20), nullable=False, default="자료")
+    # 저장소 안의 파일 이름만 둔다. 경로 구분자는 CHECK로 막는다.
+    filename: Mapped[str] = mapped_column(sa.String(120), nullable=False, unique=True)
+    size_bytes: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    published_on: Mapped[date] = mapped_column(sa.Date, nullable=False)
+    downloads: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        sa.CheckConstraint(
+            "filename NOT LIKE '%/%' AND filename NOT LIKE '%\\%' AND filename NOT LIKE '%..%'",
+            name="ck_site_documents_filename_is_plain",
+        ),
+        sa.CheckConstraint("size_bytes >= 0", name="ck_site_documents_size"),
+        sa.CheckConstraint("downloads >= 0", name="ck_site_documents_downloads"),
+    )

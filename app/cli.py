@@ -49,6 +49,7 @@ def register(app) -> None:
     app.cli.add_command(create_admin_command)
     app.cli.add_command(purge_command)
     app.cli.add_command(expire_command)
+    app.cli.add_command(seed_library_command)
 
 
 def _load_people(path: Path) -> list[dict]:
@@ -327,3 +328,51 @@ def expire_command() -> None:
         terminate(verification, "P03")
         click.echo(f"  P03 종결 {verification.id} (만료 {kst_display(verification.expires_at)})")
     click.echo(f"{len(stale)}건을 종결했다.")
+
+
+LIBRARY_META = {
+    "연동규격서_v2.md": ("본인확인 연동 규격 v2", "규격", "요청 서명 방식과 두 가지 연동 방식을 정리했습니다."),
+    "위탁사_체크리스트.md": ("위탁사 연동 전 점검표", "규격", "연동을 시작하기 전에 확인할 항목입니다."),
+    "서비스소개서.txt": ("서비스 소개서", "소개", "휴대폰 본인확인·신분증 진위확인·얼굴인증 안내입니다."),
+    "개인정보_처리방침_개정안내.txt": (
+        "개인정보 처리방침 개정 안내",
+        "약관",
+        "2026년 12월 1일 시행 개정 내용입니다.",
+    ),
+}
+
+
+@click.command("seed-library")
+@with_appcontext
+def seed_library_command() -> None:
+    """samples/library 의 공개 문서를 자료실(site_documents)에 적재한다."""
+    from app.models import SiteDocument
+
+    library = Path(current_app.config["LIBRARY_DIR"])
+    if not library.is_absolute():
+        library = Path(current_app.root_path).parent / library
+    if not library.is_dir():
+        raise click.ClickException(f"자료실 폴더가 없다: {library}")
+
+    added = updated = 0
+    for name, (title, category, summary) in LIBRARY_META.items():
+        path = library / name
+        if not path.is_file():
+            click.echo(f"  건너뜀(파일 없음): {name}")
+            continue
+        row = db.session.scalars(
+            db.select(SiteDocument).filter_by(filename=name)
+        ).one_or_none()
+        if row is None:
+            row = SiteDocument(filename=name, published_on=date(2026, 11, 18))
+            db.session.add(row)
+            added += 1
+        else:
+            updated += 1
+        row.title = title
+        row.category = category
+        row.summary = summary
+        row.size_bytes = path.stat().st_size
+
+    db.session.commit()
+    click.echo(f"자료실: 추가 {added}건, 갱신 {updated}건 ({library})")

@@ -330,6 +330,45 @@ def image_raw(verification_id, kind: str):
 # --- 접속기록 --------------------------------------------------------------
 
 
+@bp.get("/inquiries")
+@login_required
+def inquiry_list():
+    """홈페이지 문의 목록(admin·auditor 모두)."""
+    from app.models import SiteInquiry
+
+    page = max(1, request.args.get("page", type=int, default=1))
+    rows = db.session.scalars(
+        db.select(SiteInquiry)
+        .order_by(SiteInquiry.id.desc())
+        .limit(PAGE_SIZE)
+        .offset((page - 1) * PAGE_SIZE)
+    ).all()
+    total = db.session.scalar(db.select(db.func.count()).select_from(SiteInquiry)) or 0
+    return render_template(
+        "admin/inquiries.html", rows=rows, page=page, total=total, page_size=PAGE_SIZE
+    )
+
+
+@bp.get("/inquiries/<int:inquiry_id>")
+@login_required
+def inquiry_detail(inquiry_id: int):
+    """문의 상세.
+
+    양호: 본문을 Jinja autoescape로 그대로 출력한다(W-02).
+    VULN_W02를 켜면 화면에서 `| safe`로 내보내 저장형 XSS가 성립한다(D90).
+    """
+    from app.models import SiteInquiry
+
+    row = db.session.get(SiteInquiry, inquiry_id)
+    if row is None:
+        abort(404, description="해당 문의를 찾을 수 없습니다.")
+    return render_template(
+        "admin/inquiry_detail.html",
+        row=row,
+        render_raw=bool(current_app.config.get("VULN_W02")),
+    )
+
+
 @bp.get("/access-logs")
 @login_required
 def access_logs():

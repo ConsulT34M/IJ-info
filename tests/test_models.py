@@ -55,11 +55,21 @@ def _expect_integrity_error_on_commit():
     db.session.rollback()
 
 
+# 11장에 없는 표. 회사 홈페이지(공개 화면) 전용이고 개인정보 흐름에 들어가지 않는다(D90).
+SITE_TABLES = {"site_inquiries", "site_documents"}
+
+
 def test_thirteen_tables_exist(app):
-    assert set(db.metadata.tables) == EXPECTED_TABLES
+    """명세 11장의 13개 표가 그대로 있는지 본다."""
     assert len(EXPECTED_TABLES) == 13
+    assert EXPECTED_TABLES <= set(db.metadata.tables)
     inspector = sa.inspect(db.engine)
-    assert set(inspector.get_table_names()) == EXPECTED_TABLES
+    assert EXPECTED_TABLES <= set(inspector.get_table_names())
+
+
+def test_no_table_sneaks_in_outside_the_spec(app):
+    """11장 13개 + 홈페이지 2개가 전부여야 한다. 모르는 표가 생기면 알아차린다."""
+    assert set(db.metadata.tables) == EXPECTED_TABLES | SITE_TABLES
 
 
 def test_reason_code_list_matches_chapter_ten():

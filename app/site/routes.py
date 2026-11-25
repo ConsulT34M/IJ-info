@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import re
 import secrets as py_secrets
+from pathlib import Path
 
-from flask import Blueprint, abort, render_template, request
+import sqlalchemy as sa
+from flask import Blueprint, abort, current_app, render_template, request, send_file
 
+from app.common.client_ip import client_ip
 from app.common.timeutil import now_utc, to_kst
+from app.models import SiteDocument, SiteInquiry, db
 from app.site import content
 
 bp = Blueprint("site", __name__)
@@ -124,9 +128,64 @@ def support_submit():
         )
 
     receipt_no = f"IJ-{to_kst(now_utc()):%Y%m%d}-{py_secrets.token_hex(3).upper()}"
+    db.session.add(
+        SiteInquiry(
+            receipt_no=receipt_no,
+            kind=form["kind"],
+            company=form["company"],
+            manager=form["manager"],
+            email=form["email"],
+            message=form["message"],
+            ip=client_ip(),
+        )
+    )
+    db.session.commit()
+    current_app.logger.info("문의 접수: receipt_no=%s kind=%s", receipt_no, form["kind"])
     return render_template(
         "site/support_done.html", receipt_no=receipt_no, kind=form["kind"], active="support"
     )
+
+
+@bp.get("/library")
+def library():
+    """자료실 목록. 검색어(q)로 제목·설명을 찾는다."""
+    keyword = (request.args.get("q") or "").strip()[:60]
+    documents = _search_documents(keyword)
+    return render_template(
+        "site/library.html", documents=documents, keyword=keyword, active="library"
+    )
+
+
+@bp.get("/library/download")
+def library_download():
+    """자료실 파일 내려받기.
+
+    양호: 저장소의 id로만 찾고, 실제 경로는 서버가 만든다. 요청에 들어온 이름은 쓰지 않는다.
+    VULN_W05를 켜면 요청의 file 값을 그대로 경로에 붙인다(경로 조작, D90).
+    """
+    library_dir = _library_dir()
+
+    if current_app.config.get("VULN_W05"):
+        requested = request.args.get("file")
+        if requested:
+            target = library_dir / requested
+            if not target.is_file():
+                abort(404)
+            current_app.logger.warning("자료실 경로 조작 경로 사용: file=%s", requested)
+            return send_file(target, as_attachment=True, download_name=Path(requested).name)
+
+    document = db.session.get(SiteDocument, _document_id(request.args.get("doc")))
+    if document is None:
+        abort(404)
+
+    target = library_dir / document.filename
+    if not _inside(target, library_dir) or not target.is_file():
+        current_app.logger.error("자료실 파일이 없다: id=%s", document.id)
+        abort(404)
+
+    document.downloads += 1
+    db.session.commit()
+    return send_file(target, as_attachment=True, download_name=document.filename)
 
 
 @bp.get("/privacy")
@@ -139,6 +198,59 @@ def privacy():
 def demo():
     """실습 안내. 인증창은 위탁사 요청(IA-01)으로만 열린다."""
     return render_template("site/demo.html", active="demo")
+
+
+def _library_dir() -> Path:
+    """자료실 폴더의 절대 경로."""
+    configured = Path(current_app.config["LIBRARY_DIR"])
+    if not configured.is_absolute():
+        configured = Path(current_app.root_path).parent / configured
+    return configured.resolve()
+
+
+def _inside(target: Path, parent: Path) -> bool:
+    """경로가 자료실 폴더 안인지 확인한다(W-05)."""
+    try:
+        return parent in target.resolve().parents
+    except OSError:
+        return False
+
+
+def _document_id(raw: str | None) -> int:
+    try:
+        return int(raw or 0)
+    except ValueError:
+        abort(404)
+
+
+def _search_documents(keyword: str) -> list[SiteDocument]:
+    """자료실 검색.
+
+    양호: 바인딩 파라미터로 넘긴다(W-01).
+    VULN_W01을 켜면 검색어를 SQL 문자열에 그대로 이어 붙인다(SQL 인젝션, D90).
+    """
+    if not keyword:
+        return list(
+            db.session.scalars(db.select(SiteDocument).order_by(SiteDocument.published_on.desc()))
+        )
+
+    if current_app.config.get("VULN_W01"):
+        current_app.logger.warning("자료실 검색을 문자열 연결로 수행한다: q=%s", keyword)
+        statement = sa.text(
+            "SELECT * FROM site_documents"
+            f" WHERE title LIKE '%{keyword}%' OR summary LIKE '%{keyword}%'"
+            " ORDER BY published_on DESC"
+        )
+        return list(db.session.scalars(db.select(SiteDocument).from_statement(statement)))
+
+    pattern = f"%{keyword}%"
+    return list(
+        db.session.scalars(
+            db.select(SiteDocument)
+            .where(sa.or_(SiteDocument.title.ilike(pattern), SiteDocument.summary.ilike(pattern)))
+            .order_by(SiteDocument.published_on.desc())
+        )
+    )
 
 
 def _page_number(raw: str | None, pages: int) -> int:

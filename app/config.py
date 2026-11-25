@@ -15,7 +15,20 @@ from cachelib.file import FileSystemCache
 from app.common import secrets as secret_store
 
 # 14장 취약 플래그. 진단 증적의 기준이라 목록을 코드에 고정해 둔다.
-VULN_FLAGS = ("VULN_W08", "VULN_W09", "VULN_W10", "VULN_W14", "VULN_W17", "VULN_C10")
+VULN_FLAGS = (
+    # 14장 목록
+    "VULN_W08",
+    "VULN_W09",
+    "VULN_W10",
+    "VULN_W14",
+    "VULN_W17",
+    "VULN_C10",
+    # 홈페이지 자료실·문의에서만 쓰는 웹 점검용 플래그(D90).
+    # 번호는 CLAUDE.md 14장의 양호 통제 번호를 그대로 따른다.
+    "VULN_W01",  # SQL 인젝션: 자료실 검색을 문자열 연결로 만든다
+    "VULN_W02",  # 저장형 XSS: 관리자 문의 상세에서 본문을 escape 없이 출력한다
+    "VULN_W05",  # 경로 조작: 자료실 다운로드가 파일명을 그대로 경로에 붙인다
+)
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -55,6 +68,9 @@ class Config:
     FACE_SIMILARITY_THRESHOLD = 90                # 유사도 90 이상이면 일치
     UPLOAD_MAX_BYTES = 5 * 1024 * 1024            # 업로드 5MB
     UPLOAD_ALLOWED_EXTENSIONS = ("jpg", "jpeg", "png")
+    # 자료실 공개 문서가 있는 폴더. 다운로드는 이 안으로만 떨어져야 한다(W-05).
+    LIBRARY_DIR = "samples/library"
+
     STORAGE_BACKEND = "local"                     # local | s3(AWS 배포 단계)
     FACE_MATCHER = "fake"                         # fake | rekognition(AWS 배포 단계)
     CI_RETENTION_AFTER_DELIVERY = timedelta(days=7)    # 첫 수령 후 7일

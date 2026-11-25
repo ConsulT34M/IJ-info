@@ -50,7 +50,7 @@ def test_csrf_protection_is_on(app):
 
 
 def test_all_vuln_flags_default_to_false(app):
-    assert len(VULN_FLAGS) == 6
+    assert len(VULN_FLAGS) == 9  # 14장 6개 + 홈페이지 웹 점검용 3개(D90)
     for flag in VULN_FLAGS:
         assert app.config[flag] is False, flag
     assert enabled_vuln_flags(app) == []

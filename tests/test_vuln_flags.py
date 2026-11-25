@@ -53,12 +53,17 @@ def api_get(client, sign_headers):
 
 def test_every_flag_defaults_to_false(app):
     assert set(VULN_FLAGS) == {
+        # CLAUDE.md 14장
         "VULN_W08",
         "VULN_W09",
         "VULN_W10",
         "VULN_W14",
         "VULN_W17",
         "VULN_C10",
+        # 홈페이지 자료실·문의에서만 쓰는 웹 점검용(D90)
+        "VULN_W01",
+        "VULN_W02",
+        "VULN_W05",
     }
     for flag in VULN_FLAGS:
         assert app.config[flag] is False, flag

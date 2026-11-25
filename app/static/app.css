@@ -2,3 +2,9 @@
 .ekyc-shell {
   max-width: 640px;
 }
+
+/* 문의 본문처럼 줄바꿈을 살려야 하는 곳. CSP가 inline style을 막으므로 여기에 둔다. */
+.ekyc-prewrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

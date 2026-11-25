@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+{% block title %}문의{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">홈페이지 문의 <span class="text-secondary fs-6">전체 {{ total }}건</span></h1>
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle bg-white">
+    <thead>
+      <tr>
+        <th>접수번호</th><th>유형</th><th>회사명</th><th>담당자</th><th>상태</th><th>접수 시각</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><code>{{ row.receipt_no }}</code></td>
+        <td>{{ row.kind }}</td>
+        <td>{{ row.company }}</td>
+        <td>{{ row.manager }}</td>
+        <td>
+          {% if row.status == 'ANSWERED' %}<span class="badge text-bg-success">답변완료</span>
+          {% else %}<span class="badge text-bg-secondary">접수</span>{% endif %}
+        </td>
+        <td class="text-secondary small">{{ row.created_at | kst }}</td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.inquiry_detail', inquiry_id=row.id) }}">보기</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-secondary py-4">접수된 문의가 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > page_size %}
+<nav class="d-flex gap-2">
+  {% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.inquiry_list', page=page-1) }}">이전</a>{% endif %}
+  {% if page * page_size < total %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.inquiry_list', page=page+1) }}">다음</a>{% endif %}
+</nav>
+{% endif %}
+
+<p class="text-secondary small mt-3 mb-0">
+  문의는 홈페이지 고객지원 화면에서 접수됩니다. 담당자 연락처 수준만 받으며 개인정보 흐름에는 들어가지 않습니다.
+</p>
+{% endblock %}
