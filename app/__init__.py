@@ -42,6 +42,7 @@ def create_app(
     _ensure_dev_secrets()
 
     init_app_config(app, config_overrides)
+    app.json.sort_keys = False  # 응답 필드 순서를 명세와 같게 둔다
     _configure_logging(app)
 
     db.init_app(app)

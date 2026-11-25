@@ -1,4 +1,4 @@
-"""인증창 라우트: IA-02 진입, IA-03 동의, IA-04/06 휴대폰, IA-07/08 신분증, IA-10 취소."""
+"""인증창 라우트: IA-02 진입, IA-03 동의, IA-04/06 휴대폰, IA-07/08 신분증, IA-09 얼굴, IA-10 취소."""
 
 from __future__ import annotations
 
@@ -41,18 +41,20 @@ from app.common.rrn import validate_issue_date, validate_rrn
 from app.common.stage import (
     SESSION_NAME,
     SESSION_PHONE_NUMBER,
+    SESSION_RESULT,
     advance_stage,
     end_session,
     require_stage,
     stage_redirect,
     start_session,
 )
-from app.common.storage import get_storage
+from app.common.storage import StorageError, get_storage
 from app.common.timeutil import is_expired, kst_isoformat, now_utc, seconds_left
 from app.common.upload import validate_image_upload
 from app.models import (
     CONSENT_TYPES,
     Consent,
+    FaceCheck,
     IdDocument,
     PhoneOtp,
     PhoneVerification,
@@ -477,11 +479,83 @@ def id_confirm_submit():
 @bp.get("/face")
 @require_stage("FACE")
 def face_page():
-    """셀카 등록 화면. 업로드 처리(IA-09)는 6단계에서 붙인다."""
-    return render_template(
-        "verify/face.html",
-        seconds_left=int(seconds_left(g.verification.expires_at)),
+    """얼굴 사진 등록 화면."""
+    _require_id_document(g.verification)
+    return _render_face(g.verification)
+
+
+@bp.post("/face")
+@require_stage("FACE", vuln_flag="VULN_W09")
+def face_submit():
+    """IA-09. 신분증 사진과 셀카를 대조해 최종 판정한다.
+
+    D2: 최종 판정은 플래그와 무관하게 항상 `id_documents.ci_matched IS TRUE`를 요구한다.
+    VULN_W09를 켜면 stage 검사(FACE)와 진위확인 통과 확인만 빠진다.
+    """
+    verification = g.verification
+    _require_ci(verification)
+    document = _require_id_document(verification)
+
+    upload = validate_image_upload(
+        request.files.get("image"),
+        max_bytes=current_app.config["UPLOAD_MAX_BYTES"],
+        allowed_extensions=current_app.config["UPLOAD_ALLOWED_EXTENSIONS"],
     )
+    if not upload.ok:
+        current_app.logger.info(
+            "얼굴 사진 거부: verification_id=%s 사유=%s", verification.id, upload.error
+        )
+        return _fail_face(verification, "E01", _UPLOAD_MESSAGES[upload.error])
+
+    storage = get_storage()
+    try:
+        id_card_image = storage.load(document.s3_key)
+    except StorageError:
+        current_app.logger.error(
+            "신분증 이미지를 읽을 수 없다: verification_id=%s", verification.id
+        )
+        abort(500)
+
+    # 시도마다 행을 남긴다. 파일은 판정 직후 지운다.
+    check = FaceCheck(verification_id=verification.id, s3_key=storage.save(upload.data, upload.extension))
+    db.session.add(check)
+
+    comparison = get_face_matcher().compare_faces(
+        id_card_image,
+        upload.data,
+        hint=upload.hint,
+        threshold=current_app.config["FACE_SIMILARITY_THRESHOLD"],
+    )
+    check.face_count = comparison.face_count
+    check.similarity = comparison.similarity
+    check.matched = comparison.matched
+
+    storage.delete(check.s3_key)  # 판정 즉시 삭제
+    check.s3_key = None
+    check.deleted_at = now_utc()
+    db.session.commit()
+
+    if comparison.face_count != 1:
+        current_app.logger.info(
+            "얼굴 검출 실패: verification_id=%s count=%s", verification.id, comparison.face_count
+        )
+        return _fail_face(verification, "E04", "얼굴이 하나만 보이는 사진으로 다시 올린다.")
+
+    if not comparison.matched:
+        current_app.logger.info("얼굴 유사도 미달: verification_id=%s", verification.id)
+        return _fail_face(verification, "E05", "신분증 사진과 일치하지 않는다.")
+
+    current_app.logger.info("최종 판정 성공: verification_id=%s", verification.id)
+    return _finish_with_result(verification, "OK")
+
+
+@bp.get("/result")
+def result_page():
+    """결과 화면. 세션에는 판정 결과와 돌아갈 주소만 둔다(D64)."""
+    result = session.get(SESSION_RESULT)
+    if not result:
+        abort(403, description="표시할 결과가 없다.")
+    return render_template("verify/result.html", **result)
 
 
 _UPLOAD_MESSAGES = {
@@ -491,6 +565,39 @@ _UPLOAD_MESSAGES = {
     "MAGIC": "이미지 파일이 아니다. jpg 또는 png로 다시 올린다.",
     None: "신분증 사진을 다시 올린다.",
 }
+
+
+def _require_id_document(verification: Verification) -> IdDocument:
+    """얼굴 단계 요구사항. 최종 판정은 항상 CI 대조 통과를 요구한다(D2)."""
+    document = db.session.get(IdDocument, verification.id)
+    if document is None or not document.s3_key:
+        abort(403, description="신분증 사진을 먼저 등록한다.")
+    if not document.ci_matched:
+        current_app.logger.warning(
+            "CI 대조 없이 얼굴 단계 요청: verification_id=%s", verification.id
+        )
+        abort(403, description="신분증 확인을 먼저 마쳐야 한다.")
+    # 양호 기본값: 진위확인 통과도 확인한다. VULN_W09를 켜면 이 확인만 빠진다.
+    if not current_app.config.get("VULN_W09") and not document.mois_matched:
+        current_app.logger.warning(
+            "진위확인 없이 얼굴 단계 요청: verification_id=%s", verification.id
+        )
+        abort(403, description="신분증 확인을 먼저 마쳐야 한다.")
+    return document
+
+
+def _finish_with_result(verification: Verification, reason_code: str):
+    """최종 판정 후 결과 화면으로 보낸다."""
+    return_url = verification.return_url
+    terminate(verification, reason_code)
+    status = verification.status
+    end_session()
+    session[SESSION_RESULT] = {
+        "status": status,
+        "reason_code": reason_code,
+        "return_url": return_url,
+    }
+    return redirect(url_for("verify.result_page"))
 
 
 def _require_ci(verification: Verification) -> PhoneVerification:
@@ -533,6 +640,24 @@ def _fail_id_card(verification: Verification, message: str):
         "E01",
         message,
         lambda text: (_render_id_card(verification, error=text), 400),
+    )
+
+
+def _fail_face(verification: Verification, code: str, message: str):
+    return _fail_face_step(
+        verification,
+        code,
+        message,
+        lambda text: (_render_face(verification, error=text), 400),
+    )
+
+
+def _render_face(verification: Verification, *, error: str | None = None):
+    return render_template(
+        "verify/face.html",
+        error=error,
+        max_mb=current_app.config["UPLOAD_MAX_BYTES"] // (1024 * 1024),
+        seconds_left=int(seconds_left(verification.expires_at)),
     )
 
 

@@ -435,3 +435,49 @@ D41의 CHECK(`ci_matched`가 NULL이 아니면 세 값이 있어야 한다)도 �
 `id_card.png`, `selfie.png`, `selfie_mismatch.png`(E05), `noface.png`(E01·E04),
 `twofaces.png`(E01·E04), `not_an_image.png`(E01 형식). 출력 폴더는 `instance/samples`로
 `.gitignore`에 들어 있다.
+
+---
+
+## 6단계 구현 세부
+
+## D62. 셀카의 형식·용량 오류도 E01이다
+
+10장에서 E04는 "얼굴 미검출 또는 2명 이상", E05는 "얼굴 유사도 미달"이고, 셀카의 형식·용량 오류에
+해당하는 코드가 따로 없다. 이미지 오류를 가리키는 코드는 E01뿐이라 IA-09의 형식·용량 오류도 **E01**로
+묶는다(얼굴 단계 시도 합산에 포함). E04는 얼굴 수 문제에만 쓴다.
+
+## D63. 종결 시 남은 이미지는 terminate가 파기한다
+
+"이미지는 판정 즉시 Storage에서 삭제하고 s3_key NULL, deleted_at 기록"을 성공뿐 아니라
+**모든 종결 경로**(E06·X01·P01~P05·취소·만료)에 적용한다. `terminate()`가 commit 전에
+`delete_verification_images()`를 부른다. 파기 배치(`flask purge`)는 그래도 남은 것을 치우는 2차 장치다.
+
+## D64. 결과 화면은 IA-09 성공에서만 보여준다
+
+IA-09가 성공하면 인증창 세션을 비우고 **판정 결과와 돌아갈 주소만** 담은 새 세션으로
+`/verify/result`로 보낸다(성명·CI는 담지 않는다). 그 화면의 버튼으로 `return_url`로 돌아간다.
+그 외 종결(취소·P01~P05·E06·X01)은 명세대로 `return_url`로 바로 보낸다 — 실패 안내는 거래소 몫이다.
+
+## D65. `app/common/images.py` 추가
+
+`delete_verification_images(verification, *, delete_objects=True)` 하나를 둔다.
+`delete_objects=False`는 "DB 참조만 지우고 Storage 객체는 남기는" 상태를 만드는데,
+이건 9단계 `VULN_C10` 실습에서만 쓴다.
+
+## D66. IA-12는 진행 중인 건도 조회할 수 있다
+
+명세는 조회 시점을 정하지 않았다. 종결 전 건을 조회하면 `status=PENDING`,
+`reason_code=null`, 단계별 현재 상태를 돌려준다. 거래소가 폴링으로 상태를 볼 수 있게 열어 둔다
+(주민번호·이미지는 어떤 경우에도 넣지 않는다).
+
+## D67. 셀카는 시도마다 행을 남기고 판정 직후 파일을 지운다
+
+`face_checks`에 시도마다 행을 만들어 `face_count`·`similarity`·`matched`를 기록하고,
+그 요청 안에서 파일을 지운다(`s3_key` NULL + `deleted_at`). 실패한 시도의 셀카를 보관하지 않는다.
+행이 남아 있어 관리자 화면과 파기 배치가 추적할 수 있다.
+
+## D68. API 응답 필드 순서를 명세와 같게 둔다
+
+Flask 2.3부터 `JSON_SORT_KEYS` 설정이 무시되므로 `app.json.sort_keys = False`로 둔다.
+웹훅 서명은 A사가 만든 바이트 그대로에 대해 계산되므로 순서와 무관하지만, 명세 예시와 응답을
+눈으로 맞춰 보기 쉽게 하기 위한 것이다.

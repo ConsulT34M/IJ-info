@@ -18,6 +18,8 @@ SESSION_VERIFICATION_ID = "verification_id"
 SESSION_ENTRY_NONCE = "entry_nonce"
 SESSION_NAME = "name"
 SESSION_PHONE_NUMBER = "phone_number"
+# 결과 화면용. 개인정보는 넣지 않는다(판정 결과와 돌아갈 주소만)
+SESSION_RESULT = "result"
 
 # stage → 그 단계의 화면. 구현 단계마다 라우트가 생긴다.
 STAGE_ENDPOINTS = {

@@ -76,7 +76,6 @@ class Config:
 
     # --- Flask ---
     MAX_CONTENT_LENGTH = UPLOAD_MAX_BYTES + 64 * 1024  # 폼 필드 여유분
-    JSON_SORT_KEYS = False
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
     WTF_CSRF_TIME_LIMIT = None  # 세션 수명과 같이 간다

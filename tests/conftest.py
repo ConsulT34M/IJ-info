@@ -363,6 +363,22 @@ def flow(client, api_post, app):
                 content_type="multipart/form-data",
             )
 
+        def to_face(self, person: dict, **kwargs):
+            """신분증 단계까지 마치고 stage=FACE 상태로 만든다."""
+            self.to_id_card(person, **kwargs)
+            assert self.upload_id_card().status_code == 302
+            assert self.submit_id_info(person["rrn"], person["issue_date"]).status_code == 302
+            return self.verification_id
+
+        def upload_face(self, filename: str = "selfie.png", data: bytes | None = None):
+            """IA-09 얼굴 사진 업로드."""
+            payload = data if data is not None else sample_png()
+            return self.post(
+                "/verify/face",
+                {"image": (io.BytesIO(payload), filename)},
+                content_type="multipart/form-data",
+            )
+
         def submit_id_info(self, rrn: str, issue_date: str, name: str = "무시되는이름"):
             """IA-08 신분증 정보 입력. name은 서버에서 무시된다(W-16)."""
             return self.post(

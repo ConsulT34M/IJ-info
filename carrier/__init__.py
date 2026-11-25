@@ -35,12 +35,12 @@ def create_carrier_app(config_overrides: dict | None = None, instance_path: str 
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{Path(app.instance_path) / 'carrier.sqlite3'}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         MATCH_TOKEN_TTL=timedelta(minutes=5),  # 대조 토큰 5분
-        JSON_SORT_KEYS=False,
         MAX_CONTENT_LENGTH=64 * 1024,
     )
     if config_overrides:
         app.config.update(config_overrides)
 
+    app.json.sort_keys = False
     db.init_app(app)
 
     if not app.logger.handlers:

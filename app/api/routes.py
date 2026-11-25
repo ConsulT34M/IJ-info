@@ -1,4 +1,4 @@
-"""IA-01 인증 요청, IA-12 결과 조회(6단계)."""
+"""IA-01 인증 요청, IA-12 결과 조회."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from secrets import token_urlsafe
 from flask import Blueprint, abort, current_app, g, jsonify, request
 
 from app.api.auth import require_client_auth
+from app.api.webhook import build_result_payload, mark_ci_delivered
 from app.common.audit import log_access
 from app.common.client_ip import client_ip
 from app.common.crypto import sha256_hex
@@ -117,6 +118,44 @@ def create_verification():
         "IA-01 새 건: verification_id=%s client_id=%s", verification.id, g.client.id
     )
     return jsonify(_response_body(verification, token)), 201
+
+
+@bp.get("/verifications/<uuid:verification_id>")
+@require_client_auth
+def read_verification(verification_id):
+    """IA-12. 웹훅이 유실됐을 때 결과를 조회한다(주민번호·이미지는 넣지 않는다).
+
+    양호 기본값: 다른 위탁사 건은 404. VULN_W08을 켜면 소유 확인을 하지 않는다.
+    """
+    verification = db.session.get(Verification, verification_id)
+    if verification is None:
+        abort(404, description="해당 건이 없다.")
+
+    if not current_app.config.get("VULN_W08") and verification.client_id != g.client.id:
+        current_app.logger.warning(
+            "다른 위탁사 건 조회 시도: client_id=%s verification_id=%s",
+            g.client.id,
+            verification_id,
+        )
+        abort(404, description="해당 건이 없다.")
+
+    payload = build_result_payload(verification)
+    phone = verification.phone
+    payload["ci_purged_at"] = kst_isoformat(phone.ci_purged_at) if phone is not None else None
+
+    # 웹훅이 유실된 경우 첫 조회 시점을 CI 전달 시점으로 기록한다
+    if verification.status == "SUCCEEDED":
+        mark_ci_delivered(verification)
+
+    log_access(
+        "client",
+        "RESULT_QUERIED",
+        actor_id=str(g.client.id),
+        target_id=str(verification.id),
+        ip=client_ip(),
+    )
+    db.session.commit()
+    return jsonify(payload), 200
 
 
 def _response_body(verification: Verification, token: str) -> dict:

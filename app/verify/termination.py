@@ -9,6 +9,7 @@ from flask import current_app
 
 from app.api.webhook import send_result_webhook
 from app.common.audit import log_phone_event
+from app.common.images import delete_verification_images
 from app.common.timeutil import now_utc
 from app.models import Verification, db
 
@@ -48,6 +49,9 @@ def terminate(verification: Verification, reason_code: str, *, notify: bool = Tr
 
     if status != "SUCCEEDED":
         log_phone_event(verification.id, "FAILED", result_code=reason_code)
+
+    # 판정 즉시 이미지를 파기한다(성공·실패 모두)
+    delete_verification_images(verification)
 
     db.session.commit()
     current_app.logger.info(
