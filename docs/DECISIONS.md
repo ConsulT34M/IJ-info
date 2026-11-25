@@ -481,3 +481,34 @@ IA-09가 성공하면 인증창 세션을 비우고 **판정 결과와 돌아갈
 Flask 2.3부터 `JSON_SORT_KEYS` 설정이 무시되므로 `app.json.sort_keys = False`로 둔다.
 웹훅 서명은 A사가 만든 바이트 그대로에 대해 계산되므로 순서와 무관하지만, 명세 예시와 응답을
 눈으로 맞춰 보기 쉽게 하기 위한 것이다.
+
+---
+
+## 7단계 구현 세부
+
+## D69. 종결은 조건부 UPDATE로 선점한다 (동시 요청에서 웹훅 1회 보장)
+
+동시 요청 테스트에서 **취소가 동시에 두 번 들어오면 웹훅이 두 번 나가는 결함**을 찾아 고쳤다.
+`terminate()`는 이제 `UPDATE verifications SET ... WHERE id = :id AND status = 'PENDING'`로
+종결을 선점하고, 영향 행이 1이 아니면 아무것도 하지 않는다. PostgreSQL의 행 잠금 덕분에 두 번째
+요청은 첫 번째가 commit될 때까지 기다렸다가 `status <> 'PENDING'`을 보고 물러난다.
+`callbacks` 행 유무로 한 번 더 막지만(1차), 선점이 본래의 방어다.
+
+## D70. 동시 제출 테스트는 실제 병렬 HTTP 요청으로 한다
+
+`tests/test_concurrency.py`는 테스트 안에서 WSGI 서버를 띄우고(`live_server` 픽스처)
+`ThreadPoolExecutor`로 같은 요청을 8개 동시에 보낸다. `@pytest.mark.postgres`가 붙어
+`TEST_DATABASE_URL`을 준 PostgreSQL에서만 돌고, SQLite로 돌리면 skip된다.
+확인 대상: 인증창 토큰(302 1회 + 410), 인증번호(302 1회 + MC-02 1회), 대조 토큰(200 1회 + 409),
+취소·확인 경합(종결·웹훅 1회).
+
+## D71. 모의 통신사 SQLite에 잠금 대기를 둔다
+
+동시 요청에서 "database is locked"가 나지 않도록 `connect_args={"timeout": 15}`를 준다.
+대조 토큰 1회용 보장은 조건부 UPDATE가 담당하고, 이 설정은 잠금 경합을 기다리게만 한다.
+
+## D72. 통신사·웹훅 전송 지점을 모듈별로 분리했다
+
+`app.common.carrier.post_json`과 `app.api.webhook.post_json`을 각각 두었다.
+둘 다 `requests.post`를 쓰지만 테스트에서 바꿔 끼우는 지점이 분리돼, 통신사 호출을 가로채도
+웹훅 전송은 영향을 받지 않는다(그 반대도 마찬가지).

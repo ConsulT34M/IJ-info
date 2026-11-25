@@ -285,15 +285,15 @@ def carrier_backend(app, carrier_app, monkeypatch):
         def json(self):
             return json.loads(self._body.decode("utf-8"))
 
-    def _post(url, json=None, headers=None, timeout=None, verify=None):  # noqa: A002
+    def _post_json(url, payload, headers, timeout, verify):
         calls.append(
-            {"url": url, "payload": json, "headers": headers or {}, "timeout": timeout, "verify": verify}
+            {"url": url, "payload": payload, "headers": headers or {}, "timeout": timeout, "verify": verify}
         )
         with carrier_app.test_client() as carrier_http:
-            response = carrier_http.post(urlparse(url).path, json=json, headers=headers)
+            response = carrier_http.post(urlparse(url).path, json=payload, headers=headers)
             return _Response(response.status_code, response.get_data())
 
-    monkeypatch.setattr("app.common.carrier.requests.post", _post)
+    monkeypatch.setattr("app.common.carrier.post_json", _post_json)
     return calls
 
 
@@ -320,6 +320,11 @@ def flow(client, api_post, app):
                 r'name="csrf_token" value="([^"]+)"', page.get_data(as_text=True)
             ).group(1)
             return self.verification_id
+
+        @property
+        def csrf_token(self) -> str | None:
+            """실제 HTTP 요청으로 폼을 보낼 때 쓴다(동시성 테스트)."""
+            return self._csrf_token
 
         def post(self, path: str, data: dict | None = None, **kwargs):
             payload = dict(data or {})
@@ -415,3 +420,26 @@ def sample_jpg() -> bytes:
     from tools.make_sample_images import make_jpg
 
     return make_jpg()
+
+
+@pytest.fixture
+def live_server():
+    """WSGI 앱을 실제 HTTP 서버로 띄운다(동시 요청 테스트용)."""
+    import threading
+
+    from werkzeug.serving import make_server
+
+    started: list[tuple] = []
+
+    def _start(application) -> str:
+        server = make_server("127.0.0.1", 0, application, threaded=True)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        started.append((server, thread))
+        return f"http://127.0.0.1:{server.port}"
+
+    yield _start
+
+    for server, thread in started:
+        server.shutdown()
+        thread.join(timeout=5)

@@ -34,6 +34,8 @@ def create_carrier_app(config_overrides: dict | None = None, instance_path: str 
     app.config.update(
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{Path(app.instance_path) / 'carrier.sqlite3'}",
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        # 동시 요청에서 SQLite 잠금 대기 (대조 토큰 1회용 보장 테스트)
+        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"timeout": 15}},
         MATCH_TOKEN_TTL=timedelta(minutes=5),  # 대조 토큰 5분
         MAX_CONTENT_LENGTH=64 * 1024,
     )

@@ -27,17 +27,34 @@ def status_for(reason_code: str) -> str:
 
 
 def terminate(verification: Verification, reason_code: str, *, notify: bool = True) -> None:
-    """건을 종결하고 결과 웹훅을 보낸다. 이미 종결된 건은 그대로 둔다."""
+    """건을 종결하고 결과 웹훅을 보낸다. 이미 종결된 건은 그대로 둔다.
+
+    동시에 두 요청이 종결을 시도해도(예: 취소 버튼 두 번) **조건부 UPDATE로 선점**해서
+    종결과 웹훅이 한 번만 일어나게 한다.
+    """
     if verification.is_finished:
         return
 
     status = status_for(reason_code)
-    verification.status = status
-    verification.reason_code = reason_code
-    verification.stage = "DONE"
-    verification.completed_at = now_utc()
-    # 인증창 토큰은 더 쓸 수 없게 한다
-    verification.entry_nonce = None
+    claimed = db.session.execute(
+        db.update(Verification)
+        .where(Verification.id == verification.id, Verification.status == "PENDING")
+        .values(
+            status=status,
+            reason_code=reason_code,
+            stage="DONE",
+            completed_at=now_utc(),
+            # 인증창 토큰은 더 쓸 수 없게 한다
+            entry_nonce=None,
+        )
+    )
+    if claimed.rowcount != 1:
+        db.session.rollback()
+        current_app.logger.info(
+            "이미 종결된 건이라 그대로 둔다: verification_id=%s", verification.id
+        )
+        return
+    db.session.refresh(verification)
 
     phone = verification.phone
     if phone is not None:

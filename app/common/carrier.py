@@ -42,15 +42,20 @@ def _ca_bundle() -> str:
     return str(configured)
 
 
+def post_json(url: str, payload: dict, headers: dict, timeout: float, verify: str):
+    """통신사 HTTP 전송. 테스트는 이 함수만 바꿔 끼운다(웹훅 전송과 분리)."""
+    return requests.post(url, json=payload, headers=headers, timeout=timeout, verify=verify)
+
+
 def _post(path: str, payload: dict) -> requests.Response:
     base = current_app.config["CARRIER_BASE_URL"].rstrip("/")
     try:
-        return requests.post(
+        return post_json(
             f"{base}{path}",
-            json=payload,
-            headers={"X-Carrier-Client-Key": secret_store.get_secret("ekyc/phone/carrier-client-key")},
-            timeout=current_app.config["CARRIER_TIMEOUT"],
-            verify=_ca_bundle(),
+            payload,
+            {"X-Carrier-Client-Key": secret_store.get_secret("ekyc/phone/carrier-client-key")},
+            current_app.config["CARRIER_TIMEOUT"],
+            _ca_bundle(),
         )
     except requests.RequestException as exc:
         raise CarrierError(f"통신사 호출 실패: {exc.__class__.__name__}") from exc

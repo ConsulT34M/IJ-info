@@ -173,7 +173,7 @@ def test_carrier_outage_closes_with_p05(flow, app, monkeypatch, person, sent_web
     def _boom(*args, **kwargs):
         raise requests.ConnectionError("carrier down")
 
-    monkeypatch.setattr("app.common.carrier.requests.post", _boom)
+    monkeypatch.setattr("app.common.carrier.post_json", _boom)
     response = flow.request_otp(person["name"], person["phone_number"])
     assert response.status_code == 503
 
