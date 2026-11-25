@@ -10,6 +10,7 @@ SQLite는 기본적으로 외래키를 보지 않으므로 PRAGMA로 켜서 Post
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -345,6 +346,30 @@ def flow(client, api_post, app):
         def confirm_otp(self, code: str):
             return self.post("/verify/phone/confirm", {"code": code})
 
+        def to_id_card(self, person: dict, **kwargs):
+            """휴대폰 본인확인까지 마치고 stage=ID_CARD 상태로 만든다."""
+            self.to_phone(**kwargs)
+            assert self.request_otp(person["name"], person["phone_number"]).status_code == 200
+            code = self.inbox_code(person["inbox_key"])
+            assert self.confirm_otp(code).status_code == 302
+            return self.verification_id
+
+        def upload_id_card(self, filename: str = "id_card.png", data: bytes | None = None):
+            """IA-07 신분증 이미지 업로드."""
+            payload = data if data is not None else sample_png()
+            return self.post(
+                "/verify/id-card",
+                {"image": (io.BytesIO(payload), filename)},
+                content_type="multipart/form-data",
+            )
+
+        def submit_id_info(self, rrn: str, issue_date: str, name: str = "무시되는이름"):
+            """IA-08 신분증 정보 입력. name은 서버에서 무시된다(W-16)."""
+            return self.post(
+                "/verify/id-confirm",
+                {"rrn": rrn, "issue_date": issue_date, "name": name},
+            )
+
         def inbox_code(self, inbox_key: str) -> str | None:
             response = client.post("/test-inbox/latest", data={"inbox_key": inbox_key, "csrf_token": self._csrf_token})
             found = re.search(r'class="display-6 mb-1">(\d{6})<', response.get_data(as_text=True))
@@ -361,3 +386,16 @@ def seeded(app, people):
     seed_people(people)
     db.session.commit()
     return people
+
+
+def sample_png() -> bytes:
+    """매직바이트가 맞는 작은 PNG (tools/make_sample_images.py와 같은 코드를 쓴다)."""
+    from tools.make_sample_images import make_png
+
+    return make_png((200, 200, 200))
+
+
+def sample_jpg() -> bytes:
+    from tools.make_sample_images import make_jpg
+
+    return make_jpg()

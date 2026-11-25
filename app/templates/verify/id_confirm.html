@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}신분증 정보 입력{% endblock %}
+{% block content %}
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5 card-title">신분증 정보 입력</h2>
+    <p class="card-text text-secondary small">
+      성명은 휴대폰 본인확인으로 확인된 값이라 바꿀 수 없다. 남은 시간 약 {{ seconds_left // 60 }}분.
+    </p>
+
+    <form method="post" action="{{ url_for('verify.id_confirm_submit') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="name">성명</label>
+        <input class="form-control" type="text" id="name" value="{{ name }}" readonly disabled>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="rrn">주민등록번호</label>
+        <input class="form-control" type="text" id="rrn" name="rrn" maxlength="14"
+               inputmode="numeric" autocomplete="off" placeholder="9001011234568" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="issue_date">발급일자</label>
+        <input class="form-control" type="date" id="issue_date" name="issue_date" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">확인</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('verify.cancel') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="btn btn-outline-secondary w-100">취소하고 돌아가기</button>
+</form>
+{% endblock %}

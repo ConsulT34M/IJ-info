@@ -1,7 +1,7 @@
 # 가상 인물 데이터 (실습 전용, 커밋 금지)
 seed/people.json
 
-# 시크릿·업로드·세션
+# 시크릿·업로드·세션·샘플 이미지(tools/make_sample_images.py 출력)
 instance/
 .env
 *.pem

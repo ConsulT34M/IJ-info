@@ -362,17 +362,23 @@ class PhoneEvent(db.Model):
 
 
 class IdDocument(db.Model):
-    """신분증 단계. 주민번호는 AES-256-GCM 암호문으로만 보관한다."""
+    """신분증 단계. 주민번호는 AES-256-GCM 암호문으로만 보관한다.
+
+    D41: 행은 IA-07(이미지 업로드) 시점에 만든다. 그래야 업로드 직후 이탈·만료된 건의 이미지도
+    DB로 추적돼 파기 배치가 지울 수 있다. 그 시점에는 주민번호·생년월일·발급일자가 아직 없으므로
+    세 컬럼만 NULL을 허용하고, X-01 대조까지 간 건(ci_matched IS NOT NULL)에는 CHECK로 강제한다.
+    """
 
     __tablename__ = "id_documents"
 
     verification_id: Mapped[uuid.UUID] = mapped_column(
         sa.ForeignKey("verifications.id", ondelete="CASCADE"), primary_key=True
     )
+    # 성명은 휴대폰 단계에서 확인된 값(서버 세션)으로만 채운다(W-16)
     name: Mapped[str] = mapped_column(sa.String(50), nullable=False)
-    rrn_enc: Mapped[bytes] = mapped_column(sa.LargeBinary, nullable=False)
-    birth_date: Mapped[date] = mapped_column(sa.Date, nullable=False)
-    issue_date: Mapped[date] = mapped_column(sa.Date, nullable=False)
+    rrn_enc: Mapped[bytes | None] = mapped_column(sa.LargeBinary)
+    birth_date: Mapped[date | None] = mapped_column(sa.Date)
+    issue_date: Mapped[date | None] = mapped_column(sa.Date)
     ci_matched: Mapped[bool | None] = mapped_column(sa.Boolean)
     # D4: W-09 증적·관리자 표시용
     mois_matched: Mapped[bool | None] = mapped_column(sa.Boolean)
@@ -381,6 +387,14 @@ class IdDocument(db.Model):
     created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=now_utc)
 
     verification: Mapped["Verification"] = relationship(back_populates="id_document")
+
+    __table_args__ = (
+        sa.CheckConstraint(
+            "ci_matched IS NULL"
+            " OR (rrn_enc IS NOT NULL AND birth_date IS NOT NULL AND issue_date IS NOT NULL)",
+            name="ck_id_documents_rrn_present_after_ci_match",
+        ),
+    )
 
 
 class FaceCheck(db.Model):

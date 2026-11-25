@@ -19,7 +19,9 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.exceptions import HTTPException
 
 from app.common import secrets as secret_store
+from app.common.face import build_face_matcher
 from app.common.log_mask import install_masking_filter
+from app.common.storage import build_storage
 from app.config import enabled_vuln_flags, init_app_config
 from app.models import db
 
@@ -48,6 +50,8 @@ def create_app(
     csrf.init_app(app)
 
     os.makedirs(app.config["UPLOAD_DIR"], mode=0o700, exist_ok=True)
+    app.extensions["storage"] = build_storage(app.config)
+    app.extensions["face_matcher"] = build_face_matcher(app.config)
 
     _register_security_headers(app)
     _register_error_handlers(app)

@@ -55,6 +55,8 @@ class Config:
     FACE_SIMILARITY_THRESHOLD = 90                # 유사도 90 이상이면 일치
     UPLOAD_MAX_BYTES = 5 * 1024 * 1024            # 업로드 5MB
     UPLOAD_ALLOWED_EXTENSIONS = ("jpg", "jpeg", "png")
+    STORAGE_BACKEND = "local"                     # local | s3(AWS 배포 단계)
+    FACE_MATCHER = "fake"                         # fake | rekognition(AWS 배포 단계)
     CI_RETENTION_AFTER_DELIVERY = timedelta(days=7)    # 첫 수령 후 7일
     CI_RETENTION_WITHOUT_DELIVERY = timedelta(days=30)  # 미수령 시 판정 후 30일
     ADMIN_MAX_FAILED = 5                          # 관리자 5회 실패

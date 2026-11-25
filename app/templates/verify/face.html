@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}얼굴 인증{% endblock %}
+{% block content %}
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5 card-title">얼굴 사진 등록</h2>
+    <p class="card-text text-secondary small">
+      신분증 확인을 마쳤다. 남은 시간 약 {{ seconds_left // 60 }}분.
+    </p>
+    <p class="card-text text-secondary small">신분증 사진과 대조한다. jpg 또는 png, 5MB 이하.</p>
+    <button type="button" class="btn btn-primary w-100" disabled>얼굴 사진 업로드 (6단계에서 연결)</button>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('verify.cancel') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="btn btn-outline-secondary w-100">취소하고 돌아가기</button>
+</form>
+{% endblock %}

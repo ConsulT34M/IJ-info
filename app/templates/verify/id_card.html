@@ -11,8 +11,18 @@
     <p class="card-text text-secondary small">
       휴대폰 본인확인을 마쳤다({{ name_mask }}). 남은 시간 약 {{ seconds_left // 60 }}분.
     </p>
-    <p class="card-text text-secondary small">jpg 또는 png, 5MB 이하.</p>
-    <button type="button" class="btn btn-primary w-100" disabled>신분증 업로드 (5단계에서 연결)</button>
+    <p class="card-text text-secondary small">
+      jpg 또는 png, {{ max_mb }}MB 이하. 사진 영역에 얼굴이 하나만 보이게 촬영한다.
+    </p>
+
+    <form method="post" action="{{ url_for('verify.id_card_submit') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="image">신분증 이미지</label>
+        <input class="form-control" type="file" id="image" name="image" accept=".jpg,.jpeg,.png" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">등록하고 계속</button>
+    </form>
   </div>
 </div>
 

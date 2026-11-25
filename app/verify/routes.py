@@ -1,4 +1,4 @@
-"""인증창 라우트: IA-02 진입, IA-03 동의, IA-04/06 휴대폰 본인확인, IA-10 취소."""
+"""인증창 라우트: IA-02 진입, IA-03 동의, IA-04/06 휴대폰, IA-07/08 신분증, IA-10 취소."""
 
 from __future__ import annotations
 
@@ -17,11 +17,16 @@ from flask import (
     url_for,
 )
 
+from app import mock_mois
 from app.common import carrier
-from app.common.audit import log_phone_event
+from app.common.audit import log_access, log_phone_event
+from app.common.ci import ci_matches, ci_mock
+from app.common.crypto import aad, encrypt_str
+from app.common.face import get_face_matcher
 from app.common.client_ip import client_ip
 from app.common.crypto import sha256_hex
 from app.common.log_mask import mask_name, mask_phone
+from app.common import secrets as secret_store
 from app.common.phone import (
     code_mac,
     decrypt_match_token,
@@ -32,6 +37,7 @@ from app.common.phone import (
     phone_key,
     validate_name,
 )
+from app.common.rrn import validate_issue_date, validate_rrn
 from app.common.stage import (
     SESSION_NAME,
     SESSION_PHONE_NUMBER,
@@ -41,10 +47,13 @@ from app.common.stage import (
     stage_redirect,
     start_session,
 )
+from app.common.storage import get_storage
 from app.common.timeutil import is_expired, kst_isoformat, now_utc, seconds_left
+from app.common.upload import validate_image_upload
 from app.models import (
     CONSENT_TYPES,
     Consent,
+    IdDocument,
     PhoneOtp,
     PhoneVerification,
     TestPhone,
@@ -335,11 +344,223 @@ def phone_confirm():
 @bp.get("/id-card")
 @require_stage("ID_CARD")
 def id_card_page():
-    """신분증 업로드 화면. 업로드 처리(IA-07)는 5단계에서 붙인다."""
+    """신분증 사진 등록 화면."""
+    _require_ci(g.verification)
+    return _render_id_card(g.verification)
+
+
+@bp.post("/id-card")
+@require_stage("ID_CARD")
+def id_card_submit():
+    """IA-07. 신분증 이미지를 받아 얼굴 1개를 확인하고 저장한다.
+
+    W-12: 요청마다 CI 수령 완료를 확인한다.
+    D41: 이 시점에 id_documents 행을 만들어 이미지가 DB로 추적되게 한다.
+    """
+    verification = g.verification
+    _require_ci(verification)
+
+    upload = validate_image_upload(
+        request.files.get("image"),
+        max_bytes=current_app.config["UPLOAD_MAX_BYTES"],
+        allowed_extensions=current_app.config["UPLOAD_ALLOWED_EXTENSIONS"],
+    )
+    if not upload.ok:
+        current_app.logger.info(
+            "신분증 업로드 거부: verification_id=%s 사유=%s", verification.id, upload.error
+        )
+        return _fail_id_card(verification, _UPLOAD_MESSAGES[upload.error])
+
+    face_count = get_face_matcher().detect_face_count(upload.data, hint=upload.hint)
+    if face_count != 1:
+        current_app.logger.info(
+            "신분증 얼굴 검출 실패: verification_id=%s count=%s", verification.id, face_count
+        )
+        return _fail_id_card(verification, "신분증 사진에서 얼굴이 하나만 보이도록 다시 촬영한다.")
+
+    storage = get_storage()
+    document = db.session.get(IdDocument, verification.id)
+    if document is None:
+        document = IdDocument(verification_id=verification.id, name=session[SESSION_NAME])
+        db.session.add(document)
+
+    previous_key = document.s3_key
+    document.s3_key = storage.save(upload.data, upload.extension)
+    document.deleted_at = None
+    if previous_key:
+        storage.delete(previous_key)  # D41: 재업로드 시 이전 파일은 즉시 지운다
+
+    advance_stage(verification, "ID_CONFIRM")
+    db.session.commit()
+    current_app.logger.info("신분증 이미지 등록: verification_id=%s", verification.id)
+    return stage_redirect(verification)
+
+
+@bp.get("/id-confirm")
+@require_stage("ID_CONFIRM")
+def id_confirm_page():
+    """신분증 정보 입력 화면. 성명은 서버 세션 값으로 고정한다(W-16)."""
+    _require_ci(g.verification)
+    return _render_id_confirm(g.verification)
+
+
+@bp.post("/id-confirm")
+@require_stage("ID_CONFIRM")
+def id_confirm_submit():
+    """IA-08. 체크섬 → X-01 CI 대조 → 모의 진위확인 순서로 본다.
+
+    요청 본문의 성명은 무시하고 서버 세션 값을 쓴다(W-16).
+    """
+    verification = g.verification
+    phone = _require_ci(verification)
+    document = db.session.get(IdDocument, verification.id)
+    if document is None or not document.s3_key:
+        abort(403, description="신분증 사진을 먼저 등록한다.")
+
+    name = session.get(SESSION_NAME)
+    if not name:
+        abort(403, description="처음부터 다시 진행한다.")
+
+    rrn_check = validate_rrn(request.form.get("rrn"))
+    if not rrn_check.ok:
+        current_app.logger.info(
+            "주민번호 검사 실패: verification_id=%s 사유=%s", verification.id, rrn_check.error
+        )
+        return _fail_id_confirm(verification, "E02", "주민등록번호를 다시 확인한다.")
+
+    issue_check = validate_issue_date(request.form.get("issue_date"), rrn_check.birth_date)
+    if not issue_check.ok:
+        current_app.logger.info(
+            "발급일자 검사 실패: verification_id=%s 사유=%s", verification.id, issue_check.error
+        )
+        return _fail_id_confirm(verification, "E02", "발급일자를 다시 확인한다.")
+
+    document.rrn_enc = encrypt_str(
+        secret_store.get_key("ekyc/rrn-key"),
+        rrn_check.rrn,
+        aad("id_documents", "rrn_enc", verification.id),
+    )
+    document.birth_date = rrn_check.birth_date
+    document.issue_date = issue_check.issue_date
+
+    # X-01: 입력 주민번호로 계산한 CI와 휴대폰 본인확인으로 받은 CI를 대조한다(W-13)
+    computed_ci = ci_mock(rrn_check.rrn, secret_store.get_key("ekyc/ci-key"))
+    if not ci_matches(computed_ci, phone.ci):
+        document.ci_matched = False
+        log_access(
+            "system",
+            "CI_MISMATCH",
+            actor_id=str(verification.client_id),
+            target_id=str(verification.id),
+            ip=client_ip(),
+        )
+        db.session.commit()
+        current_app.logger.warning("X-01 CI 불일치: verification_id=%s", verification.id)
+        terminate(verification, "X01")  # 재시도 없이 즉시 종결
+        end_session()
+        return redirect(verification.return_url)
+
+    document.ci_matched = True
+
+    if not mock_mois.verify(name, rrn_check.rrn, issue_check.issue_date):
+        document.mois_matched = False
+        current_app.logger.info("진위확인 불일치: verification_id=%s", verification.id)
+        return _fail_id_confirm(verification, "E03", "신분증 정보가 확인되지 않는다.")
+
+    document.mois_matched = True
+    advance_stage(verification, "FACE")
+    db.session.commit()
+    current_app.logger.info("신분증 확인 완료: verification_id=%s", verification.id)
+    return stage_redirect(verification)
+
+
+@bp.get("/face")
+@require_stage("FACE")
+def face_page():
+    """셀카 등록 화면. 업로드 처리(IA-09)는 6단계에서 붙인다."""
+    return render_template(
+        "verify/face.html",
+        seconds_left=int(seconds_left(g.verification.expires_at)),
+    )
+
+
+_UPLOAD_MESSAGES = {
+    "EMPTY": "신분증 사진을 선택한다.",
+    "EXTENSION": "jpg 또는 png 파일만 올릴 수 있다.",
+    "SIZE": "5MB 이하 파일만 올릴 수 있다.",
+    "MAGIC": "이미지 파일이 아니다. jpg 또는 png로 다시 올린다.",
+    None: "신분증 사진을 다시 올린다.",
+}
+
+
+def _require_ci(verification: Verification) -> PhoneVerification:
+    """W-12: 신분증 단계 요청마다 CI 수령 완료를 확인한다."""
+    phone = db.session.get(PhoneVerification, verification.id)
+    if phone is None or phone.status != "PASSED" or not phone.ci:
+        current_app.logger.warning(
+            "CI 미수령 상태의 신분증 단계 요청: verification_id=%s", verification.id
+        )
+        abort(403, description="휴대폰 본인확인을 먼저 마쳐야 한다.")
+    return phone
+
+
+def _bump_face_attempts(verification: Verification, code: str) -> int:
+    """얼굴 단계 시도(E01~E05 합산)를 올리고 중간 실패 코드를 남긴다(D8, D10)."""
+    verification.face_attempts += 1
+    verification.last_error_code = code
+    db.session.commit()
+    return verification.face_attempts
+
+
+def _fail_face_step(verification: Verification, code: str, message: str, renderer):
+    """시도 횟수를 올리고, 3회에 도달하면 E06으로 종결한다(D10)."""
+    attempts = _bump_face_attempts(verification, code)
+    limit = current_app.config["FACE_MAX_ATTEMPTS"]
+    if attempts >= limit:
+        current_app.logger.info(
+            "얼굴 단계 시도 초과: verification_id=%s 마지막 코드=%s", verification.id, code
+        )
+        terminate(verification, "E06")
+        end_session()
+        return redirect(verification.return_url)
+    remaining = limit - attempts
+    return renderer(f"{message} (남은 시도 {remaining}회)")
+
+
+def _fail_id_card(verification: Verification, message: str):
+    return _fail_face_step(
+        verification,
+        "E01",
+        message,
+        lambda text: (_render_id_card(verification, error=text), 400),
+    )
+
+
+def _fail_id_confirm(verification: Verification, code: str, message: str):
+    return _fail_face_step(
+        verification,
+        code,
+        message,
+        lambda text: (_render_id_confirm(verification, error=text), 400),
+    )
+
+
+def _render_id_card(verification: Verification, *, error: str | None = None):
     return render_template(
         "verify/id_card.html",
+        error=error,
         name_mask=mask_name(session.get(SESSION_NAME)),
-        seconds_left=int(seconds_left(g.verification.expires_at)),
+        max_mb=current_app.config["UPLOAD_MAX_BYTES"] // (1024 * 1024),
+        seconds_left=int(seconds_left(verification.expires_at)),
+    )
+
+
+def _render_id_confirm(verification: Verification, *, error: str | None = None):
+    return render_template(
+        "verify/id_confirm.html",
+        error=error,
+        name=session.get(SESSION_NAME),
+        seconds_left=int(seconds_left(verification.expires_at)),
     )
 
 

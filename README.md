@@ -47,6 +47,15 @@ A사는 `CARRIER_CA_BUNDLE`의 인증서만 신뢰한다(인증서 고정). 인�
 .venv/bin/flask create-admin --login-id admin1 --role admin --allowed-ips 127.0.0.1
 ```
 
+## 샘플 이미지
+
+```bash
+.venv/bin/python tools/make_sample_images.py   # instance/samples/ (커밋 안 함)
+```
+
+`FakeFaceMatcher`는 **파일명**으로 판정한다: `noface`→얼굴 0개, `twofaces`→2개,
+`mismatch`→유사도 40, 그 외→얼굴 1개·유사도 95.
+
 ## 인증 흐름 확인 (가짜 거래소)
 
 `tools/fake_exchange.py`는 거래소 담당에게 넘기는 서명 구현 예시다. A사 코드를 import하지 않는다.
