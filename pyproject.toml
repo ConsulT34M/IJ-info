@@ -1,0 +1,9 @@
+[project]
+name = "ekyc"
+version = "0.1.0"
+description = "A사 비대면 본인확인 대행 (실습용)"
+requires-python = "==3.11.*"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

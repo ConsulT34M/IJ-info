@@ -1,0 +1,22 @@
+# 가상 인물 데이터 (실습 전용, 커밋 금지)
+seed/people.json
+
+# 시크릿·업로드·세션
+instance/
+.env
+*.pem
+*.key
+*.crt
+carrier/certs/
+carrier/*.sqlite3
+carrier/instance/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# macOS
+.DS_Store
