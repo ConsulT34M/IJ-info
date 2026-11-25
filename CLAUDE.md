@@ -250,8 +250,8 @@ access_logs.action: REQUEST_RECEIVED, RESULT_QUERIED, CALLBACK_SENT, CI_MISMATCH
 
 ## 13. 설계 결정 (노션 통합 문서에서 바꾼 것)
 
-- **D1 (W-14 구현 가능하게)**: MC-01이 내부용 `reason`(`NAME_MISMATCH` / `NOT_SUBSCRIBER`)을 돌려준다. A사는 기본(양호)에서 둘을 P01 한 가지 메시지·같은 HTTP 응답으로 합친다. `VULN_W14`가 켜지면 서로 다른 메시지·HTTP 상태로 노출한다.
-- **D2 (W-09가 W-13까지 뚫지 않게)**: 최종 판정(F-09)은 플래그와 무관하게 항상 `id_documents.ci_matched IS TRUE`를 요구한다. `VULN_W09`는 /verify/face의 stage 검사(FACE)만 빼서 ID_CONFIRM에서도 받고, 진위확인 통과(`mois_matched`)를 확인하지 않는다. 즉 W-09 = "진위확인만 우회".
+- **D1 (명의 대조 실패 사유를 내부에만 둔다)**: MC-01이 내부용 `reason`(`NAME_MISMATCH` / `NOT_SUBSCRIBER`)을 돌려준다. A사는 **둘을 P01 한 가지 메시지·같은 HTTP 응답으로 합친다.** 내부 `reason`은 로그·증적용이고 이용자 응답에는 구분이 드러나지 않는다(가입 여부 열거 방지).
+- **D2 (X-01 통과는 면제되지 않는다)**: 최종 판정(F-09)은 **어떤 설정에서도 항상** `id_documents.ci_matched IS TRUE`를 요구한다. 얼굴 단계 진입 요건을 느슨하게 하는 설정이 들어오더라도 이 조건만은 그대로 둔다. 요건 검사는 `app/common/decision.py` 한 곳에 모아 두 경로(인증창·서버 간 API)가 같은 함수를 쓴다.
 - **D3 (공개 오라클 제거)**: 모의 진위확인은 HTTP 라우트 없이 앱 내부 함수 호출이다. 테스트 수신함은 `TEST_INBOX_ALLOWED_IPS`로 제한하고 진단 범위에서 제외한다.
 - **D4**: `id_documents.mois_matched` 컬럼 추가 (W-09 증적·관리자 표시용).
 - **D5 (오픈 리다이렉트 방지)**: IA-01의 return_url은 해당 client의 callback_url과 같은 origin만 허용.
@@ -270,19 +270,21 @@ access_logs.action: REQUEST_RECEIVED, RESULT_QUERIED, CALLBACK_SENT, CI_MISMATCH
 - 로그 마스킹 필터: 성명·휴대폰번호·인증번호·주민번호 원문, CI, 대조 토큰, 인증창 토큰을 로그에 남기지 않는다.
 - 이미지: 판정 즉시 Storage에서 삭제하고 s3_key NULL, deleted_at 기록.
 
-### 앱 코드 취약 플래그 (config.py, 기본 전부 False)
-| 플래그 | 켜면 |
-|---|---|
-| VULN_W08 | IA-12가 client_id 소유를 확인하지 않음 (다른 위탁사 건 조회 가능) |
-| VULN_W09 | D2 참고. /verify/face가 ID_CONFIRM에서도 받고 진위확인 통과를 확인하지 않음 |
-| VULN_W10 | 관리자 목록 JSON API(/admin/api/verifications)가 주민번호 전체를 돌려주고 마스킹은 화면 JS에서만 |
-| VULN_W14 | D1 참고. 이름 불일치와 미등록 번호를 다른 메시지·HTTP 응답으로 |
-| VULN_W17 | 앱 디버그 로그에 인증번호 원문과 휴대폰번호를 남김 (마스킹 필터 우회) |
-| VULN_C10 | 파기 배치가 DB의 이미지 참조만 지우고 Storage 객체는 남김 |
+### 취약 플래그
 
-그 외 취약(U-03, U-07, U-10, U-14, A-01, A-07, D-03, C-03, C-05, C-07, C-12, C-16)은 서버·AWS 설정이라 이번 범위 밖이다. 나중에 `ops/apply_vuln.sh` / `ops/revert_vuln.sh`로 만든다.
+플래그 목록과 "켜면 무엇이 뚫리는가"는 **저장소에 두지 않는다.** `private/VULN_MATRIX.md`에 있다
+(gitignore 대상). 진단 대상 시스템의 명세서에 정답을 적어 두면 진단이 성립하지 않기 때문이다.
 
-각 플래그마다 테스트를 한 쌍 만든다: "기본값에서는 막힌다" / "플래그를 켜면 뚫린다". 진단 증적의 기준이 된다.
+구현 기준은 `app/config.py`의 `VULN_FLAGS`다. 규칙은 그대로다.
+
+- **기본값은 전부 `False`.** 플래그는 요청 시점에 `current_app.config`에서 읽는다.
+- 플래그마다 테스트를 한 쌍 만든다: "기본값에서는 막힌다" / "플래그를 켜면 뚫린다".
+  **넘지 말아야 하는 선**도 함께 고정한다(플래그 하나가 다른 통제까지 무너뜨리지 않는지).
+- 켜는 방법은 `.env`에 `VULN_XXX=true`. 코드는 고치지 않는다.
+  웹서버(Apache) 설정 취약은 `ops/apply_vuln.sh` / `ops/revert_vuln.sh`로 전환한다.
+- 하나라도 켜져 있으면 기동 로그에 경고가 찍힌다.
+
+서버·AWS 설정 영역의 취약은 앱 코드 범위 밖이고, 대상 목록도 `private/`에 둔다.
 
 ## 15. 관리자 콘솔
 
@@ -312,7 +314,7 @@ access_logs.action: REQUEST_RECEIVED, RESULT_QUERIED, CALLBACK_SENT, CI_MISMATCH
 | 6 | IA-09, 최종 판정, IA-11 웹훅, IA-12, 결과 화면 | **가짜 거래소가 SUCCEEDED 웹훅 수신 = 성공 경로 완주** |
 | 7 | 실패 경로 전부 (P01\~P05, E01\~E06, X01, 만료, 취소, 동시 제출) | 사유 코드별 웹훅·HTTP 응답 테스트 |
 | 8 | 관리자 콘솔, access_logs, purge·expire | 조회·열람·파기가 로그에 남음 |
-| 9 | 취약 플래그 6개 + 플래그별 테스트 쌍 | 기본값 전부 양호, 켜면 해당 동작만 바뀜 |
+| 9 | 취약 플래그 + 플래그별 테스트 쌍 (목록은 `private/`) | 기본값 전부 양호, 켜면 해당 동작만 바뀜 |
 
 ## 18. 작업 규칙
 
