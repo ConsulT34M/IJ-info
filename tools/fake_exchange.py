@@ -17,15 +17,22 @@
     python tools/fake_exchange.py request --client-user-ref user-0001
     python tools/fake_exchange.py serve                 # 웹훅 수신 (별도 터미널)
     python tools/fake_exchange.py query <verification_id>
+
+인증 화면을 거래소가 직접 만드는 경우(IA-21·22, D87):
+    python tools/fake_exchange.py direct \
+      --name 홍길동 --rrn 9001011234567 --issue-date 2015-03-02 --ci <88자> \
+      --id-card samples/images/id_card.png --face samples/images/selfie.png
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import hmac
 import json
 import os
+import pathlib
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -87,6 +94,84 @@ def cmd_request(args: argparse.Namespace) -> int:
         print("\n아래 주소를 브라우저에서 연다(10분·1회용):")
         print(f"  {data['auth_url']}")
     return 0 if response.status_code in (200, 201) else 1
+
+
+# --- IA-21 / IA-22 거래소가 화면을 만드는 경우 ---------------------------------
+
+
+def post_signed(args, path: str, payload: dict):
+    """서명을 붙여 JSON을 보낸다. 이미지도 이 본문에 base64로 들어간다."""
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return requests.post(
+        f"{args.base_url.rstrip('/')}{path}",
+        data=body,
+        headers=signed_headers(args.api_key, args.hmac_secret, body),
+        timeout=30,
+    )
+
+
+def read_image(path: str) -> tuple[str, str]:
+    """파일을 base64 문자열과 파일명으로 바꾼다. 파일명은 확장자 확인용이다."""
+    file_path = pathlib.Path(path)
+    data = file_path.read_bytes()
+    return base64.b64encode(data).decode("ascii"), file_path.name
+
+
+def cmd_direct(args: argparse.Namespace) -> int:
+    """IA-01(DIRECT) → IA-21 → IA-22 를 순서대로 호출한다.
+
+    실제 거래소라면 이 세 호출 사이에 자기 화면에서 이용자 입력을 받는다.
+    여기서는 명령행 인자로 한 번에 받아 흐름만 보여준다.
+    """
+    created = post_signed(
+        args, "/api/v1/verifications", {"client_user_ref": args.client_user_ref, "mode": "DIRECT"}
+    )
+    print(f"[IA-01] HTTP {created.status_code}")
+    _print_json(created)
+    if created.status_code not in (200, 201):
+        return 1
+    verification_id = created.json()["verification_id"]
+
+    image, filename = read_image(args.id_card)
+    submitted = post_signed(
+        args,
+        f"/api/v1/verifications/{verification_id}/id-card",
+        {
+            "name": args.name,
+            "rrn": args.rrn,
+            "issue_date": args.issue_date,
+            "ci": args.ci,
+            "filename": filename,
+            "image": image,
+            # 동의는 거래소 화면에서 받고, 받은 사실만 넘긴다(선택)
+            "consents": [
+                {"type": kind, "version": "v1.0"}
+                for kind in ("collect", "uid", "carrier_terms", "biometric")
+            ],
+        },
+    )
+    print(f"\n[IA-21 신분증] HTTP {submitted.status_code}")
+    _print_json(submitted)
+    if submitted.status_code != 200:
+        return 1
+    if submitted.json().get("status") == "FAILED":
+        return 1  # X01 등으로 그 자리에서 종결됐다
+
+    image, filename = read_image(args.face)
+    final = post_signed(
+        args,
+        f"/api/v1/verifications/{verification_id}/face",
+        {"filename": filename, "image": image},
+    )
+    print(f"\n[IA-22 얼굴] HTTP {final.status_code}")
+    _print_json(final)
+    if final.status_code != 200:
+        return 1
+
+    body = final.json()
+    print(f"\n판정: {body['status']} ({body['reason_code']})")
+    print("결과 웹훅도 callback_url로 한 번 더 간다. serve 터미널에서 확인한다.")
+    return 0 if body["status"] == "SUCCEEDED" else 1
 
 
 # --- IA-11 웹훅 수신 ----------------------------------------------------------
@@ -194,7 +279,9 @@ def _print_json(response: requests.Response) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="가짜 거래소: IA-01 요청 / 웹훅 수신 / IA-12 조회")
+    parser = argparse.ArgumentParser(
+        description="가짜 거래소: IA-01 요청 / 직접 제출(IA-21·22) / 웹훅 수신 / IA-12 조회"
+    )
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help=f"A사 주소 (기본 {DEFAULT_BASE_URL})")
     parser.add_argument("--api-key", default=os.environ.get("EKYC_API_KEY", ""))
     parser.add_argument("--hmac-secret", default=os.environ.get("EKYC_HMAC_SECRET", ""))
@@ -209,6 +296,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="callback_url과 같은 origin이어야 한다(D5)",
     )
     request_parser.set_defaults(func=cmd_request)
+
+    direct_parser = sub.add_parser(
+        "direct", help="IA-01(DIRECT) → IA-21 → IA-22. 거래소가 화면을 직접 만드는 경우"
+    )
+    direct_parser.add_argument("--client-user-ref", default="user-0001")
+    direct_parser.add_argument("--name", required=True)
+    direct_parser.add_argument("--rrn", required=True, help="하이픈 없는 13자리")
+    direct_parser.add_argument("--issue-date", required=True, help="YYYY-MM-DD")
+    direct_parser.add_argument(
+        "--ci", required=True, help="거래소가 휴대폰 본인확인에서 받은 88자 CI"
+    )
+    direct_parser.add_argument("--id-card", required=True, help="신분증 이미지 파일")
+    direct_parser.add_argument("--face", required=True, help="얼굴 이미지 파일")
+    direct_parser.set_defaults(func=cmd_direct)
 
     serve_parser = sub.add_parser("serve", help="IA-11 웹훅 수신·서명 검증")
     serve_parser.add_argument("--port", type=int, default=DEFAULT_CALLBACK_PORT)

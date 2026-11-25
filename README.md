@@ -322,14 +322,52 @@ $env:EKYC_API_KEY = "..."; $env:EKYC_HMAC_SECRET = "..."
 
 ## 위탁사(거래소) 연동 가이드
 
-거래소 쪽에서 구현할 것은 **3개**다. `tools/fake_exchange.py`가 그 **참고 구현**이고,
-A사 코드를 import하지 않고 표준 라이브러리 + `requests`만 쓴다. 그대로 가져가도 된다.
+`tools/fake_exchange.py`가 **참고 구현**이다. A사 코드를 import하지 않고 표준 라이브러리 +
+`requests`만 쓴다. 그대로 가져가도 된다.
+
+연동 방식은 **두 가지**이고, IA-01의 `mode`로 고른다. 기본은 ⒜라서 **기존 연동은 고칠 것이 없다.**
+
+### ⒜ 인증 화면을 A사가 띄운다 — `mode: "REDIRECT"` (기본)
+
+거래소가 구현할 것은 **3개**다.
 
 | ID | 방향 | 메서드·경로 | 용도 |
 |---|---|---|---|
 | **IA-01** | 거래소 → A사 | `POST /api/v1/verifications` | 인증 요청, `auth_url` 수신 |
 | **IA-11** | A사 → 거래소 | `POST {callback_url}` | 결과 웹훅(판정 시 1회) |
 | **IA-12** | 거래소 → A사 | `GET /api/v1/verifications/{id}` | 웹훅 유실 시 결과 조회 |
+
+이용자를 `auth_url`로 보내면 동의·휴대폰·신분증·얼굴을 **A사 화면**이 받는다.
+거래소는 주민등록번호와 신분증·얼굴 사진을 **아예 보지 않는다.**
+
+### ⒝ 인증 화면을 거래소가 만든다 — `mode: "DIRECT"`
+
+거래소가 자기 화면에서 입력을 받아 서버 간 API로 넘긴다. **휴대폰 본인확인은 거래소가 하고,
+그때 받은 CI를 같이 보낸다.** A사는 그 CI와 제출된 주민등록번호로 계산한 CI를 대조한다(X-01).
+
+| ID | 방향 | 메서드·경로 | 용도 |
+|---|---|---|---|
+| **IA-01** | 거래소 → A사 | `POST /api/v1/verifications` (`mode: "DIRECT"`) | `auth_url` 없이 `verification_id`만 |
+| **IA-21** | 거래소 → A사 | `POST /api/v1/verifications/{id}/id-card` | 신분증 이미지 + 성명·주민번호·발급일자 + CI |
+| **IA-22** | 거래소 → A사 | `POST /api/v1/verifications/{id}/face` | 얼굴 이미지 → **최종 판정** |
+| **IA-11 / IA-12** | | 위와 동일 | 결과 웹훅·조회(동기 응답으로도 받는다) |
+
+```bash
+python tools/fake_exchange.py direct \
+  --name 홍길동 --rrn 9001011234567 --issue-date 2015-03-02 \
+  --ci "(88자 CI)" \
+  --id-card samples/images/id_card.png --face samples/images/selfie.png
+```
+
+- 이미지는 **JSON 본문에 base64**로 담는다. 아래 서명 규칙을 그대로 쓸 수 있어서다.
+  원본 5MB 상한은 그대로다.
+- **`ci`는 필수**다. 없으면 "휴대폰 명의자와 신분증 명의자가 같다"를 A사가 보장할 수 없다.
+- 다시 제출하면 되는 실패(E01~E05)는 **400** + `reason_code`·`attempts_left`,
+  판정이 확정되면(OK·X01·E06) **200** + 웹훅과 같은 결과 본문이다.
+- ⒝를 쓰면 **주민등록번호·신분증 사진을 거래소가 직접 수집**하게 된다. 동의 수집과
+  안전조치 책임이 거래소로 옮겨가므로 개인정보 처리방침을 함께 손봐야 한다.
+
+전체 계약은 [docs/DECISIONS.md](docs/DECISIONS.md) 0.4절에 있다.
 
 ### 서명 규칙 (양방향 동일)
 
@@ -442,7 +480,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 .
 ├─ app/                     A사 Flask 앱
 │  ├─ site/                 회사 홈페이지(공개 화면) — 소개·공지·고객지원·처리방침
-│  ├─ api/                  IA-01, IA-12, 웹훅 전송(IA-11)
+│  ├─ api/                  IA-01, IA-12, 웹훅 전송(IA-11), IA-21·22(거래소 화면용 경로)
 │  ├─ verify/               인증창 IA-02~IA-10, 건 종결
 │  ├─ test_inbox/           IA-05 테스트 문자 수신함 (실습 전용, 진단 범위 제외)
 │  ├─ mock_mois/            모의 진위확인 — 함수만, HTTP 라우트 없음
@@ -456,7 +494,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (426개)
+├─ tests/                   pytest (456개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
@@ -512,6 +550,7 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 | 8 | 관리자 콘솔, `access_logs`, `purge`·`expire` | 완료 |
 | 9 | 취약 플래그 6개(`VULN_W08`·`W09`·`W10`·`W14`·`W17`·`C10`) + 플래그별 테스트 쌍 | 완료 |
 | + | 회사 홈페이지(공개 화면) — 진단용 공개 노출면 | 완료 |
+| + | IA-21·22 — 위탁사가 화면을 만드는 서버 간 경로(`mode: DIRECT`) | 완료 |
 
 - **모든 `VULN_*` 플래그는 기본 `False`** 다. 플래그마다 "기본값에서는 막힌다 / 켜면 뚫린다"
   테스트 쌍이 있고(`tests/test_vuln_flags.py`), 넘지 말아야 하는 선도 함께 고정했다

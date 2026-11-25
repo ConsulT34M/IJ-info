@@ -75,7 +75,9 @@ class Config:
     }
 
     # --- Flask ---
-    MAX_CONTENT_LENGTH = UPLOAD_MAX_BYTES + 64 * 1024  # 폼 필드 여유분
+    # 폼 필드 여유분 + IA-21/22가 이미지를 base64(4/3배)로 보내는 몫(D87).
+    # 실제 이미지 상한은 UPLOAD_MAX_BYTES로 따로 검사한다. 여기는 과대 요청 차단용이다.
+    MAX_CONTENT_LENGTH = UPLOAD_MAX_BYTES * 4 // 3 + 64 * 1024
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
     WTF_CSRF_TIME_LIMIT = None  # 세션 수명과 같이 간다

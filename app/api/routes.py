@@ -15,7 +15,7 @@ from app.common.client_ip import client_ip
 from app.common.crypto import sha256_hex
 from app.common.timeutil import is_expired, kst_isoformat, now_utc
 from app.common.urls import parse_absolute_url, same_origin
-from app.models import Verification, db
+from app.models import VERIFICATION_MODES, Verification, db
 
 bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
@@ -60,7 +60,15 @@ def create_verification():
     if len(client_user_ref) > MAX_CLIENT_USER_REF:
         abort(400, description="client_user_ref가 너무 깁니다.")
 
+    # D87: 기본은 기존 인증창 방식. DIRECT면 위탁사가 화면을 만들고 IA-21·22로 제출한다.
+    mode = payload.get("mode", "REDIRECT")
+    if mode not in VERIFICATION_MODES:
+        abort(400, description="mode는 REDIRECT 또는 DIRECT입니다.")
+
     return_url = payload.get("return_url")
+    if mode == "DIRECT" and return_url is None:
+        # 돌려보낼 브라우저가 없다. 값은 NOT NULL이라 콜백 주소로 채운다.
+        return_url = g.client.callback_url
     if parse_absolute_url(return_url) is None:
         abort(400, description="return_url이 허용된 절대 주소가 아닙니다.")
     # D5: 오픈 리다이렉트 방지. callback_url과 같은 origin만 받는다
@@ -69,7 +77,12 @@ def create_verification():
 
     existing = db.session.scalars(
         db.select(Verification)
-        .filter_by(client_id=g.client.id, client_user_ref=client_user_ref, status="PENDING")
+        .filter_by(
+            client_id=g.client.id,
+            client_user_ref=client_user_ref,
+            status="PENDING",
+            mode=mode,
+        )
         .order_by(Verification.created_at.desc())
     ).first()
 
@@ -80,7 +93,8 @@ def create_verification():
         existing = None
 
     if existing is not None:
-        token = issue_entry_token(existing)
+        # DIRECT에는 인증창 토큰이 없다. 같은 건을 그대로 돌려준다.
+        token = issue_entry_token(existing) if mode == "REDIRECT" else None
         existing.return_url = return_url
         log_access(
             "client",
@@ -99,11 +113,14 @@ def create_verification():
     verification = Verification(
         client_id=g.client.id,
         client_user_ref=client_user_ref,
+        mode=mode,
+        # DIRECT는 동의·휴대폰 단계가 위탁사에 있으므로 신분증 단계에서 시작한다
+        stage="ID_CARD" if mode == "DIRECT" else "CONSENT",
         return_url=return_url,
         created_at=created,
         expires_at=created + current_app.config["VERIFICATION_TTL"],
     )
-    token = issue_entry_token(verification)
+    token = issue_entry_token(verification) if mode == "REDIRECT" else None
     db.session.add(verification)
     db.session.flush()
     log_access(
@@ -158,9 +175,13 @@ def read_verification(verification_id):
     return jsonify(payload), 200
 
 
-def _response_body(verification: Verification, token: str) -> dict:
-    return {
+def _response_body(verification: Verification, token: str | None) -> dict:
+    body = {
         "verification_id": str(verification.id),
-        "auth_url": auth_url_for(token),
-        "expires_at": kst_isoformat(verification.expires_at),
+        "mode": verification.mode,
     }
+    # DIRECT에는 인증창이 없으므로 auth_url을 넣지 않는다(D87).
+    if token is not None:
+        body["auth_url"] = auth_url_for(token)
+    body["expires_at"] = kst_isoformat(verification.expires_at)
+    return body

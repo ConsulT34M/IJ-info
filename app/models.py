@@ -28,6 +28,9 @@ db = SQLAlchemy(model_class=Base)
 
 # --- 코드 목록 (CHECK 제약으로 DB에도 박는다) ---
 
+# 인증 방식(D87): 인증창을 A사가 띄우는 기존 방식 / 위탁사가 화면을 만들고 API만 쓰는 방식
+VERIFICATION_MODES = ("REDIRECT", "DIRECT")
+
 STAGES = ("CONSENT", "PHONE", "ID_CARD", "ID_CONFIRM", "FACE", "DONE")
 STATUSES = ("PENDING", "SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED")
 REASON_CODES = (
@@ -113,6 +116,8 @@ class Verification(db.Model):
         sa.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
     )
     client_user_ref: Mapped[str] = mapped_column(sa.String(100), nullable=False)
+    # D87: REDIRECT는 A사 인증창, DIRECT는 위탁사가 화면을 만들고 서버 간 API만 쓴다
+    mode: Mapped[str] = mapped_column(sa.String(10), nullable=False, default="REDIRECT")
     # 인증창 토큰: 해시만 보관하고 1회 사용 시 token_used_at을 원자적으로 기록한다
     token_hash: Mapped[str | None] = mapped_column(sa.String(64), unique=True)
     token_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime)
@@ -143,6 +148,7 @@ class Verification(db.Model):
     callbacks: Mapped[list["Callback"]] = relationship(back_populates="verification")
 
     __table_args__ = (
+        sa.CheckConstraint(_in_list("mode", VERIFICATION_MODES), name="ck_verifications_mode"),
         sa.CheckConstraint(_in_list("stage", STAGES), name="ck_verifications_stage"),
         sa.CheckConstraint(_in_list("status", STATUSES), name="ck_verifications_status"),
         sa.CheckConstraint(

@@ -22,6 +22,7 @@ from app.common import carrier
 from app.common.audit import log_access, log_phone_event
 from app.common.ci import ci_matches, ci_mock
 from app.common.crypto import aad, encrypt_str
+from app.common.decision import bump_face_attempts, require_id_document
 from app.common.face import get_face_matcher
 from app.common.client_ip import client_ip
 from app.common.crypto import sha256_hex
@@ -568,22 +569,8 @@ _UPLOAD_MESSAGES = {
 
 
 def _require_id_document(verification: Verification) -> IdDocument:
-    """얼굴 단계 요구사항. 최종 판정은 항상 CI 대조 통과를 요구한다(D2)."""
-    document = db.session.get(IdDocument, verification.id)
-    if document is None or not document.s3_key:
-        abort(403, description="신분증 사진을 먼저 등록해 주세요.")
-    if not document.ci_matched:
-        current_app.logger.warning(
-            "CI 대조 없이 얼굴 단계 요청: verification_id=%s", verification.id
-        )
-        abort(403, description="신분증 확인을 먼저 완료해 주세요.")
-    # 양호 기본값: 진위확인 통과도 확인한다. VULN_W09를 켜면 이 확인만 빠진다.
-    if not current_app.config.get("VULN_W09") and not document.mois_matched:
-        current_app.logger.warning(
-            "진위확인 없이 얼굴 단계 요청: verification_id=%s", verification.id
-        )
-        abort(403, description="신분증 확인을 먼저 완료해 주세요.")
-    return document
+    """얼굴 단계 요구사항(D2). 서버 간 API(IA-22)와 같은 함수를 쓴다."""
+    return require_id_document(verification)
 
 
 def _finish_with_result(verification: Verification, reason_code: str):
@@ -612,11 +599,8 @@ def _require_ci(verification: Verification) -> PhoneVerification:
 
 
 def _bump_face_attempts(verification: Verification, code: str) -> int:
-    """얼굴 단계 시도(E01~E05 합산)를 올리고 중간 실패 코드를 남긴다(D8, D10)."""
-    verification.face_attempts += 1
-    verification.last_error_code = code
-    db.session.commit()
-    return verification.face_attempts
+    """얼굴 단계 시도 합산(D8, D10). 서버 간 API와 같은 함수를 쓴다."""
+    return bump_face_attempts(verification, code)
 
 
 def _fail_face_step(verification: Verification, code: str, message: str, renderer):
