@@ -1,5 +1,9 @@
-# 가상 인물 데이터 (실습 전용, 커밋 금지)
+# 작업용 가상 인물 데이터. 커밋되는 원본은 samples/people.json 이다
 seed/people.json
+
+# 샘플 이미지 중 형식 오류 확인용 변형만 제외 (기본 5개는 커밋한다)
+samples/images/*.jpg
+samples/images/not_an_image.png
 
 # 시크릿·업로드·세션·샘플 이미지(tools/make_sample_images.py 출력)
 instance/
@@ -7,6 +11,10 @@ instance/
 *.pem
 *.key
 *.crt
+*.p12
+*.sqlite3
+*.sqlite
+*.db
 carrier/certs/
 carrier/*.sqlite3
 carrier/instance/

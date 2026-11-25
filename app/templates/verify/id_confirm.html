@@ -19,9 +19,15 @@
         <input class="form-control" type="text" id="name" value="{{ name }}" readonly disabled>
       </div>
       <div class="mb-3">
-        <label class="form-label" for="rrn">주민등록번호</label>
-        <input class="form-control" type="text" id="rrn" name="rrn" maxlength="14"
-               inputmode="numeric" autocomplete="off" placeholder="9001011234568" required>
+        <label class="form-label" for="rrn_front">주민등록번호</label>
+        <div class="input-group">
+          <input class="form-control" type="text" id="rrn_front" name="rrn_front" maxlength="6"
+                 inputmode="numeric" autocomplete="off" placeholder="앞 6자리" pattern="[0-9]{6}" required>
+          <span class="input-group-text">-</span>
+          <input class="form-control" type="password" id="rrn_back" name="rrn_back" maxlength="7"
+                 inputmode="numeric" autocomplete="off" placeholder="뒤 7자리" pattern="[0-9]{7}" required>
+        </div>
+        <div class="form-text">뒤 7자리는 화면에 표시되지 않는다.</div>
       </div>
       <div class="mb-3">
         <label class="form-label" for="issue_date">발급일자</label>

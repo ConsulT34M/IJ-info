@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """수동 확인용 샘플 이미지 생성.
 
-    python tools/make_sample_images.py [--out instance/samples]
+    python tools/make_sample_images.py [--out samples/images] [--extras]
 
 매직바이트가 맞는 작은 PNG/JPG를 FakeFaceMatcher 규칙(2장)에 맞는 파일명으로 만든다.
 
@@ -12,9 +12,12 @@
 | selfie_mismatch.png  | 얼굴 1개, 유사도 40           | E05 유사도 미달 |
 | noface.png           | 얼굴 0개                     | E01 / E04       |
 | twofaces.png         | 얼굴 2개                     | E01 / E04       |
-| not_an_image.png     | (매직바이트 불일치)           | E01 형식 오류   |
 
-생성 폴더는 커밋하지 않는다(.gitignore).
+`--extras`를 주면 형식 오류 확인용 파일도 만든다(이 셋은 커밋하지 않는다):
+`id_card.jpg`, `selfie.jpg`, `not_an_image.png`(매직바이트 불일치 → E01).
+
+기본 5개는 `samples/images/`에 커밋돼 있고, 같은 바이트로 다시 생성된다.
+**전부 합성 이미지다. 실제 사람의 사진이 아니다.**
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ import struct
 import zlib
 from pathlib import Path
 
-DEFAULT_OUT = Path(__file__).resolve().parents[1] / "instance" / "samples"
+DEFAULT_OUT = Path(__file__).resolve().parents[1] / "samples" / "images"
 
 # 파일명 → 캔버스 색 (내용은 판정에 쓰이지 않는다. 파일명 힌트만 본다)
 PNG_FILES = {
@@ -72,6 +75,9 @@ def make_jpg() -> bytes:
 def main() -> int:
     parser = argparse.ArgumentParser(description="샘플 이미지 생성")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--extras", action="store_true", help="형식 오류 확인용 파일도 만든다(커밋 대상 아님)"
+    )
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -81,15 +87,15 @@ def main() -> int:
         (args.out / name).write_bytes(data)
         created.append((name, len(data)))
 
-    jpeg = make_jpg()
-    for name in JPG_FILES:
-        (args.out / name).write_bytes(jpeg)
-        created.append((name, len(jpeg)))
-
-    # 확장자만 이미지인 파일 (E01 형식 오류 확인용)
-    bogus = b"This is not an image.\n"
-    (args.out / "not_an_image.png").write_bytes(bogus)
-    created.append(("not_an_image.png", len(bogus)))
+    if args.extras:
+        jpeg = make_jpg()
+        for name in JPG_FILES:
+            (args.out / name).write_bytes(jpeg)
+            created.append((name, len(jpeg)))
+        # 확장자만 이미지인 파일 (E01 형식 오류 확인용)
+        bogus = b"This is not an image.\n"
+        (args.out / "not_an_image.png").write_bytes(bogus)
+        created.append(("not_an_image.png", len(bogus)))
 
     print(f"샘플 이미지 {len(created)}개 → {args.out}")
     for name, size in created:

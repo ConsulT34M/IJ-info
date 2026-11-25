@@ -423,7 +423,7 @@ def id_confirm_submit():
     if not name:
         abort(403, description="처음부터 다시 진행한다.")
 
-    rrn_check = validate_rrn(request.form.get("rrn"))
+    rrn_check = validate_rrn(_submitted_rrn(request.form))
     if not rrn_check.ok:
         current_app.logger.info(
             "주민번호 검사 실패: verification_id=%s 사유=%s", verification.id, rrn_check.error
@@ -678,6 +678,15 @@ def _render_id_card(verification: Verification, *, error: str | None = None):
         max_mb=current_app.config["UPLOAD_MAX_BYTES"] // (1024 * 1024),
         seconds_left=int(seconds_left(verification.expires_at)),
     )
+
+
+def _submitted_rrn(form) -> str | None:
+    """F-05: 화면은 앞 6자리·뒤 7자리로 나눠 받고(뒤는 password) 서버에서 합친다(D79)."""
+    front = (form.get("rrn_front") or "").strip()
+    back = (form.get("rrn_back") or "").strip()
+    if front or back:
+        return f"{front}{back}"
+    return form.get("rrn")
 
 
 def _render_id_confirm(verification: Verification, *, error: str | None = None):

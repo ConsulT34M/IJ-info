@@ -386,10 +386,16 @@ def flow(client, api_post, app):
             )
 
         def submit_id_info(self, rrn: str, issue_date: str, name: str = "무시되는이름"):
-            """IA-08 신분증 정보 입력. name은 서버에서 무시된다(W-16)."""
+            """IA-08 신분증 정보 입력. 화면과 같이 앞 6자리·뒤 7자리로 나눠 보낸다(D79)."""
+            digits = re.sub(r"[\s-]", "", rrn or "")
             return self.post(
                 "/verify/id-confirm",
-                {"rrn": rrn, "issue_date": issue_date, "name": name},
+                {
+                    "rrn_front": digits[:6],
+                    "rrn_back": digits[6:],
+                    "issue_date": issue_date,
+                    "name": name,
+                },
             )
 
         def inbox_code(self, inbox_key: str) -> str | None:

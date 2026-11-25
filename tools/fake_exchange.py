@@ -28,7 +28,7 @@ import json
 import os
 import sys
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import requests
 
@@ -96,6 +96,24 @@ def make_callback_handler(secret: str, path: str):
     class CallbackHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
+        def do_GET(self):  # noqa: N802
+            """인증창이 돌려보낸 return_url. 실제 거래소라면 여기서 결과 화면을 보여준다."""
+            page = (
+                "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
+                "<title>거래소로 돌아왔다</title></head><body>"
+                "<h1>인증창에서 돌아왔다</h1>"
+                "<p>판정 결과는 웹훅을 받는 터미널에서 확인한다.</p>"
+                "<p>(가짜 거래소 스크립트의 return_url 자리다. 실제 거래소는 "
+                "여기서 자체 결과 화면을 보여준다.)</p>"
+                "</body></html>"
+            ).encode("utf-8")
+            print(f"\n[return_url] 이용자가 {self.path} 로 돌아왔다", flush=True)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+
         def do_POST(self):  # noqa: N802  (BaseHTTPRequestHandler 규약)
             if self.path != path:
                 self._respond(404, {"error": "not found"})
@@ -136,7 +154,11 @@ def make_callback_handler(secret: str, path: str):
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    server = HTTPServer(("127.0.0.1", args.port), make_callback_handler(args.hmac_secret, args.path))
+    # 브라우저가 return_url로 연결을 열어 둔 사이에도 웹훅을 받아야 하므로 스레드 서버를 쓴다
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", args.port), make_callback_handler(args.hmac_secret, args.path)
+    )
+    server.daemon_threads = True
     print(f"웹훅 수신 대기: http://127.0.0.1:{args.port}{args.path}  (Ctrl+C로 종료)", flush=True)
     try:
         server.serve_forever()

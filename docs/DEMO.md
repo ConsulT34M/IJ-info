@@ -18,7 +18,7 @@ bash tools/demo_reset.sh          # 확인 후 진행 (-y 로 확인 생략)
 | 모의 통신사 가입자 10명 + 사업자 키 | `carrier/instance/carrier.sqlite3` |
 | 가짜 거래소 API Key·HMAC Secret | `instance/fake_exchange.env` (600) |
 | 관리자 2명(admin1 / auditor1) 비밀번호·TOTP 시크릿 | `instance/demo_admins.env` (600) |
-| 샘플 이미지 8개 | `instance/samples/` |
+| 샘플 이미지(커밋된 5개 + 형식 오류용 3개) | `samples/images/` |
 
 관리자 OTP 코드는 이렇게 본다.
 
@@ -87,9 +87,9 @@ source instance/fake_exchange.env
 | 6 | 사람 1의 성명·번호 입력 | 인증번호 화면. **마스킹된 번호(010-\*\*\*\*-1234)만** 보이고 인증번호는 화면에 없다 |
 | 7 | 수신함에서 사람 1의 `inbox_key` 입력 | 6자리 인증번호와 유효 시각(KST) |
 | 8 | 인증번호 입력 | 신분증 사진 등록 화면 |
-| 9 | `instance/samples/id_card.png` 업로드 | 신분증 정보 입력 화면. **성명은 바꿀 수 없게 채워져 있다** |
+| 9 | `samples/images/id_card.png` 업로드 | 신분증 정보 입력 화면. **성명은 바꿀 수 없게 채워져 있다** |
 | 10 | 사람 1의 주민번호·발급일자 입력 | 얼굴 사진 등록 화면 |
-| 11 | `instance/samples/selfie.png` 업로드 | "본인확인이 완료됐다" + 돌아가기 버튼 |
+| 11 | `samples/images/selfie.png` 업로드 | "본인확인이 완료됐다" + 돌아가기 버튼 |
 | 12 | 터미널 ③ 확인 | `서명 검증 성공` + `status: SUCCEEDED`, `name`·`birth_date`·`ci_mock`·`verified_at(+09:00)` |
 | 13 | `tools/peek.py --latest` | CI "보관 중(88자, 비표시)", 이미지 2건 "파기됨", `phone_events` 5건 |
 | 14 | `fake_exchange query <verification_id>` | 같은 결과 + `ci_purged_at: null` |

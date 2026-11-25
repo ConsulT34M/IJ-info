@@ -102,6 +102,43 @@ def test_hyphenated_rrn_is_accepted(flow, carrier_backend, person):
     assert flow.submit_id_info(f"{digits[:6]}-{digits[6:]}", person["issue_date"]).status_code == 302
 
 
+def test_rrn_back_digits_are_masked_on_screen(flow, carrier_backend, person, client):
+    """F-05: 뒤 7자리는 화면에 보이지 않는 입력칸으로 받는다(D79)."""
+    flow.to_id_card(person)
+    flow.upload_id_card()
+    body = client.get("/verify/id-confirm").get_data(as_text=True)
+    assert 'name="rrn_front"' in body and 'maxlength="6"' in body
+    assert 'type="password"' in body and 'name="rrn_back"' in body
+    assert "뒤 7자리는 화면에 표시되지 않는다" in body
+
+
+def test_single_rrn_field_still_works(flow, carrier_backend, person):
+    """스크립트·점검 도구가 한 칸으로 보내도 받아준다(D79)."""
+    flow.to_id_card(person)
+    flow.upload_id_card()
+    response = flow.post(
+        "/verify/id-confirm",
+        {"rrn": person["rrn"], "issue_date": person["issue_date"]},
+    )
+    assert response.status_code == 302
+    assert db.session.get(IdDocument, flow.verification_id).mois_matched is True
+
+
+def test_rrn_halves_are_joined_even_with_a_hyphen(flow, carrier_backend, person):
+    flow.to_id_card(person)
+    flow.upload_id_card()
+    digits = person["rrn"]
+    response = flow.post(
+        "/verify/id-confirm",
+        {
+            "rrn_front": f"{digits[:6]}-",
+            "rrn_back": digits[6:],
+            "issue_date": person["issue_date"],
+        },
+    )
+    assert response.status_code == 302
+
+
 def test_id_step_requires_ci(flow, carrier_backend, person):
     """W-12: 신분증 단계 요청마다 CI 수령 완료를 확인한다."""
     verification_id = flow.to_id_card(person)

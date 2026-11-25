@@ -23,6 +23,11 @@ from faker import Faker  # noqa: E402
 from app.common.log_mask import mask_name, mask_phone, mask_rrn  # noqa: E402
 from app.common.rrn import build_rrn, validate_issue_date, validate_rrn  # noqa: E402
 
+NOTICE = (
+    "전부 가상 데이터다. 실제 인물이 아니다. "
+    "성명은 Faker ko_KR, 주민번호는 체크섬만 맞춘 가상 값, 휴대폰번호는 가짜 번호다. "
+    "격리된 실습 환경에서만 쓴다."
+)
 DEFAULT_SEED = 20261129
 PEOPLE_COUNT = 10
 DEFAULT_OUT = Path(__file__).resolve().parent / "people.json"
@@ -111,7 +116,12 @@ def main() -> int:
     people = make_people(seed=args.seed)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
-        json.dumps({"seed": args.seed, "people": people}, indent=2, ensure_ascii=False) + "\n",
+        json.dumps(
+            {"notice": NOTICE, "seed": args.seed, "people": people},
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
         encoding="utf-8",
     )
     args.out.chmod(0o600)

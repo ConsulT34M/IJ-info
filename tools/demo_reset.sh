@@ -62,10 +62,16 @@ TABLES=$(docker compose exec -T db psql -U ekyc -d ekyc -tAc \
 echo "테이블 ${TABLES}개 (13 + alembic_version)"
 
 step "가상 인물"
-if [ "$REGEN_PEOPLE" -eq 1 ] || [ ! -f seed/people.json ]; then
+if [ "$REGEN_PEOPLE" -eq 1 ]; then
+  $PY seed/make_people.py | tail -n 12
+elif [ -f samples/people.json ]; then
+  cp samples/people.json seed/people.json
+  chmod 600 seed/people.json
+  echo "samples/people.json 을 쓴다 (팀원 모두 같은 10명). --regen-people 로 새로 뽑는다"
+elif [ ! -f seed/people.json ]; then
   $PY seed/make_people.py | tail -n 12
 else
-  echo "seed/people.json 을 그대로 쓴다 (--regen-people 로 다시 생성)"
+  echo "seed/people.json 을 그대로 쓴다"
 fi
 
 step "A사 적재 (시크릿 + 진위확인 대장 + 테스트 수신함)"
@@ -131,7 +137,7 @@ chmod 600 instance/demo_admins.env
 echo "instance/demo_admins.env 에 저장했다 (권한 600)"
 
 step "샘플 이미지"
-$PY tools/make_sample_images.py | head -n 1
+$PY tools/make_sample_images.py --extras | head -n 1
 
 cat <<EOF
 
