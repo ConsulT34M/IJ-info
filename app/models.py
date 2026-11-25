@@ -13,6 +13,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import sqlalchemy as sa
+from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -211,7 +212,7 @@ class Callback(db.Model):
     verification: Mapped["Verification"] = relationship(back_populates="callbacks")
 
 
-class Admin(db.Model):
+class Admin(UserMixin, db.Model):
     """관리자 콘솔 계정. TOTP 시크릿은 암호문으로만 보관한다."""
 
     __tablename__ = "admins"

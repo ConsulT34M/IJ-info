@@ -1,0 +1,35 @@
+{% extends "admin/base.html" %}
+{% block title %}관리자{% endblock %}
+{% block content %}
+<h2 class="h5 mb-3">관리자 계정</h2>
+<div class="table-responsive bg-white border rounded">
+  <table class="table table-sm align-middle mb-0">
+    <thead class="table-light">
+      <tr><th>아이디</th><th>역할</th><th>허용 IP</th><th>마지막 로그인</th><th>실패</th><th>잠금 해제</th><th>역할 변경</th></tr>
+    </thead>
+    <tbody>
+      {% for row in admins %}
+      <tr>
+        <td class="small">{{ row.login_id }}</td>
+        <td class="small">{{ row.role }}</td>
+        <td class="small">{{ row.allowed_ips | join(', ') }}</td>
+        <td class="small text-nowrap">{{ row.last_login_at | kst }}</td>
+        <td class="small">{{ row.failed_count }}</td>
+        <td class="small text-nowrap">{{ row.locked_until | kst }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.change_role', admin_id=row.id) }}" class="d-flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select class="form-select form-select-sm" name="role" aria-label="역할">
+              <option value="admin" {% if row.role == 'admin' %}selected{% endif %}>admin</option>
+              <option value="auditor" {% if row.role == 'auditor' %}selected{% endif %}>auditor</option>
+            </select>
+            <button class="btn btn-sm btn-outline-primary" type="submit">변경</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-secondary small mt-3 mb-0">역할 변경은 ROLE_CHANGE로 접속기록에 남는다.</p>
+{% endblock %}

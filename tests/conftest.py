@@ -18,6 +18,7 @@ import time
 import uuid
 from datetime import timedelta
 
+import flask
 import pytest
 import sqlalchemy as sa
 
@@ -443,3 +444,69 @@ def live_server():
     for server, thread in started:
         server.shutdown()
         thread.join(timeout=5)
+
+
+@pytest.fixture
+def make_admin(app):
+    """관리자 계정을 만든다(비밀번호·TOTP 시크릿을 함께 돌려준다)."""
+    import bcrypt
+    import pyotp
+
+    from app.common.crypto import aad, encrypt_str
+    from app.models import Admin
+
+    def _make(
+        login_id: str = "admin1",
+        role: str = "admin",
+        password: str = "verylongpassword1",
+        allowed_ips: tuple[str, ...] = ("127.0.0.1",),
+    ) -> dict:
+        admin_id = uuid.uuid4()
+        secret = pyotp.random_base32()
+        row = Admin(
+            id=admin_id,
+            login_id=login_id,
+            password_hash=bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(),
+            otp_secret=encrypt_str(
+                secrets_mod.get_key("ekyc/admin-otp-key"),
+                secret,
+                aad("admins", "otp_secret", admin_id),
+            ),
+            role=role,
+            allowed_ips=list(allowed_ips),
+        )
+        db.session.add(row)
+        db.session.commit()
+        return {"admin": row, "password": password, "secret": secret, "totp": pyotp.TOTP(secret)}
+
+    return _make
+
+
+@pytest.fixture
+def admin_session(app, make_admin):
+    """로그인(ID/PW + TOTP)까지 마친 관리자 클라이언트를 만든다."""
+
+    def _login(**kwargs) -> dict:
+        account = make_admin(**kwargs)
+        http = app.test_client()
+        # 테스트는 앱 컨텍스트를 공유하므로 g에 캐시된 CSRF 토큰을 버려야
+        # 이 클라이언트의 세션에 새 토큰이 심긴다(운영에서는 요청마다 g가 새로 생긴다)
+        flask.g.pop("csrf_token", None)
+        page = http.get("/admin/login")
+        token = re.search(r'name="csrf_token" value="([^"]+)"', page.get_data(as_text=True)).group(1)
+        first = http.post(
+            "/admin/login",
+            data={
+                "login_id": account["admin"].login_id,
+                "password": account["password"],
+                "csrf_token": token,
+            },
+        )
+        assert first.status_code == 302, first.get_data(as_text=True)[:400]
+        second = http.post("/admin/otp", data={"code": account["totp"].now(), "csrf_token": token})
+        assert second.status_code == 302, second.get_data(as_text=True)[:400]
+        account["http"] = http
+        account["csrf"] = token
+        return account
+
+    return _login

@@ -6,6 +6,8 @@ SK쉴더스 루키즈 보안컨설팅 트랙 최종 프로젝트. 위탁사(가�
 
 - 기준 명세: [CLAUDE.md](CLAUDE.md)
 - 설계 결정 기록: [docs/DECISIONS.md](docs/DECISIONS.md)
+- 노션 반영 요약: [docs/NOTION_SUMMARY.md](docs/NOTION_SUMMARY.md)
+- **시연 안내: [docs/DEMO.md](docs/DEMO.md)** (`bash tools/demo_reset.sh` 로 초기화)
 - **격리된 실습 환경 전용.** 실제 개인정보를 쓰지 않는다. 가상 인물 10명(고정 시드),
   체크섬만 맞춘 가상 주민번호, 가짜 휴대폰번호만 쓴다.
 - 기본값은 전부 양호(안전)다. 진단 연습용 취약 동작은 `VULN_*` 플래그를 켤 때만 나온다.
@@ -68,6 +70,16 @@ export EKYC_API_KEY=... EKYC_HMAC_SECRET=...
 .venv/bin/python tools/fake_exchange.py request --client-user-ref user-0001   # 터미널 2
 # 출력된 auth_url을 브라우저에서 연다 → 동의 → 휴대폰 입력 화면
 .venv/bin/python tools/fake_exchange.py query <verification_id>               # IA-12 (6단계)
+```
+
+## 관리자 콘솔·파기 배치
+
+```bash
+.venv/bin/flask create-admin --login-id admin1 --role admin --allowed-ips 127.0.0.1
+# http://127.0.0.1:8000/admin/login  (ID/PW → TOTP)
+.venv/bin/flask purge    # CI 보관기한 파기 + 종결 건의 남은 이미지 파기 (--dry-run 가능)
+.venv/bin/flask expire   # 20분 지난 진행 건을 P03으로 종결 + 웹훅
+.venv/bin/python tools/peek.py --latest   # 건 하나를 마스킹된 상태로 확인
 ```
 
 ## 테스트

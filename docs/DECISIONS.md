@@ -512,3 +512,52 @@ Flask 2.3부터 `JSON_SORT_KEYS` 설정이 무시되므로 `app.json.sort_keys =
 `app.common.carrier.post_json`과 `app.api.webhook.post_json`을 각각 두었다.
 둘 다 `requests.post`를 쓰지만 테스트에서 바꿔 끼우는 지점이 분리돼, 통신사 호출을 가로채도
 웹훅 전송은 영향을 받지 않는다(그 반대도 마찬가지).
+
+---
+
+## 8단계 구현 세부
+
+## D73. 화면·다운로드의 시각은 KST(+09:00)로 표시한다
+
+저장은 그대로 naive UTC(D23)이고, **보여줄 때만** KST로 바꾼다.
+`timeutil.kst_display()`가 `2026-11-25 10:30:00 +09:00` 문자열을 만들고 Jinja 필터 `| kst`로 쓴다.
+관리자 목록·상세·접속기록·관리자 목록 화면, `flask expire`·`flask purge` 출력, `tools/peek.py`가
+모두 이 형식을 쓴다. API·웹훅은 ISO 형식(`kst_isoformat`)으로 `+09:00`을 붙인다.
+시간대 없는 시각을 화면에 내보내면 점검에서 기록 시각을 신뢰할 수 없게 되기 때문이다.
+
+## D74. 관리자 로그인 성공·실패는 access_logs에 넣지 않는다
+
+11장의 `access_logs.action` 목록에 로그인 관련 값이 없고, 그 목록은 CHECK 제약으로 DB에 박혀 있다.
+스키마를 바꾸지 않기 위해 로그인 시도·잠금은 **앱 로그**에만 남기고, 관리자의 조회 행위는
+`HISTORY_VIEW`로 남긴다. 로그인 이력 자체를 화면에서 봐야 한다면 `action` 목록에 값을 추가해야
+하므로 스키마 변경으로 따로 결정한다(알려진 한계).
+
+## D75. 이미지 열람은 "사유 입력 → 60초 승인" 2단계로 한다
+
+사유를 적어 POST하면 `IMAGE_VIEW`를 기록하고 세션에 **60초짜리 열람 승인**을 남긴다.
+이미지 바이트를 내려주는 라우트는 그 승인(같은 건·같은 종류·유효시간)을 확인한다.
+W-05의 "짧은 유효기간의 서명 URL 또는 관리자 전용 라우트"를 관리자 전용 라우트 + 짧은 승인으로 만든 것이다.
+`admin` 역할만 열람할 수 있고, 이미 파기된 이미지는 "파기됨"만 보여주고 기록도 남기지 않는다
+(열람한 것이 없으므로).
+
+## D76. `flask create-admin --password-stdin` 추가
+
+시연 초기화 스크립트에서 비밀번호를 비대화식으로 넣어야 해서 표준입력 첫 줄에서 읽는 옵션을 뒀다.
+명령행 인자로는 받지 않는다(프로세스 목록·셸 히스토리에 남기지 않기 위해).
+
+## D77. 이력 다운로드(CSV)는 1차 범위에서 제외한다
+
+명세 1장이 CSV 다운로드를 제외했으므로 화면에 다운로드 기능을 두지 않았다.
+`access_logs.action`의 `HISTORY_DOWNLOAD`와 "사유 필수" CHECK는 그대로 두어
+기능을 붙일 때 바로 쓸 수 있게 했다.
+
+## D78. 시연 도구 3개
+
+- `tools/demo_reset.sh` — DB 초기화 → 마이그레이션 → `flask seed` → 통신사 인증서·명부 →
+  가짜 거래소 고객사 등록(`instance/fake_exchange.env`, 600) → 관리자 2명 생성
+  (TOTP 등록 URI와 현재 코드 확인 방법 출력, `instance/demo_admins.env`, 600) → 샘플 이미지.
+  몇 번이고 다시 돌릴 수 있고, 기본은 확인을 묻는다(`-y`로 생략).
+- `tools/peek.py <verification_id|--latest>` — 건 하나의 stage·status·reason_code·
+  last_error_code와 `phone_events`·`access_logs`·`callbacks`를 **마스킹된 상태로** 출력.
+  CI는 보관 여부만 보여준다.
+- `docs/DEMO.md` — 터미널 3개 띄우는 법과 시나리오별 "어디를 누르면 무엇이 보여야 정상인지" 표.

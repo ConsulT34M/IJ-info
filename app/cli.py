@@ -9,21 +9,36 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import sys
 import uuid
 from datetime import date
 from pathlib import Path
 import bcrypt
 import click
 import pyotp
+from flask import current_app
 from flask.cli import with_appcontext
 
 from app.common import secrets as secret_store
+from app.common.audit import log_access, log_phone_event
 from app.common.crypto import aad, encrypt_str, hmac_sha256_hex, sha256_hex
+from app.common.images import delete_verification_images
+from app.common.timeutil import kst_display, now_utc
 from app.common.hmac_auth import api_key_hash, generate_api_key, generate_hmac_secret
 from app.common.log_mask import mask_name, mask_phone, mask_rrn
 from app.common.rrn import normalize_rrn
 from app.common.urls import allowed_schemes, parse_absolute_url
-from app.models import Admin, Client, MockMoisRegistry, TestPhone, db
+from app.models import (
+    Admin,
+    Client,
+    FaceCheck,
+    IdDocument,
+    MockMoisRegistry,
+    PhoneVerification,
+    TestPhone,
+    Verification,
+    db,
+)
 
 PEOPLE_FILE = Path(__file__).resolve().parents[1] / "seed" / "people.json"
 
@@ -32,6 +47,8 @@ def register(app) -> None:
     app.cli.add_command(seed_command)
     app.cli.add_command(create_client_command)
     app.cli.add_command(create_admin_command)
+    app.cli.add_command(purge_command)
+    app.cli.add_command(expire_command)
 
 
 def _load_people(path: Path) -> list[dict]:
@@ -180,14 +197,22 @@ def create_client_command(name: str, callback_url: str, allowed_ips: str) -> Non
 @click.option("--login-id", required=True)
 @click.option("--role", type=click.Choice(["admin", "auditor"]), default="admin", show_default=True)
 @click.option("--allowed-ips", required=True, help="관리자별 허용 IP(쉼표 구분, CIDR 가능)")
+@click.option(
+    "--password-stdin",
+    is_flag=True,
+    help="비밀번호를 표준입력 첫 줄에서 읽는다(스크립트용). 명령행 인자로는 받지 않는다.",
+)
 @with_appcontext
-def create_admin_command(login_id: str, role: str, allowed_ips: str) -> None:
+def create_admin_command(login_id: str, role: str, allowed_ips: str, password_stdin: bool) -> None:
     """관리자를 등록하고 TOTP 등록 URI를 출력한다."""
     ips = _parse_ips(allowed_ips)
     if db.session.scalars(db.select(Admin).filter_by(login_id=login_id)).one_or_none():
         raise click.ClickException(f"같은 login_id가 이미 있다: {login_id}")
 
-    password = click.prompt("비밀번호", hide_input=True, confirmation_prompt=True)
+    if password_stdin:
+        password = sys.stdin.readline().rstrip("\n")
+    else:
+        password = click.prompt("비밀번호", hide_input=True, confirmation_prompt=True)
     if len(password) < 12:
         raise click.ClickException("비밀번호는 12자 이상으로 넣는다.")
 
@@ -213,3 +238,92 @@ def create_admin_command(login_id: str, role: str, allowed_ips: str) -> None:
     click.echo(f"관리자를 등록했다: {login_id} ({role}), 허용 IP {', '.join(ips)}")
     click.echo("OTP 앱에 아래 URI를 등록한다(지금 한 번만 보여준다).")
     click.echo(f"  {uri}")
+
+
+@click.command("purge")
+@click.option("--dry-run", is_flag=True, help="무엇을 지울지만 보여준다")
+@with_appcontext
+def purge_command(dry_run: bool) -> None:
+    """CI 보관기한이 지난 건의 CI를 파기하고, 종결된 건에 남은 이미지를 지운다(F-14).
+
+    보관기한: 첫 수령 후 7일 / 미수령 시 판정 후 30일.
+    VULN_C10을 켜면 DB 참조만 지우고 Storage 객체는 남긴다(실습용).
+    """
+    now = now_utc()
+    after_delivery = now - current_app.config["CI_RETENTION_AFTER_DELIVERY"]
+    without_delivery = now - current_app.config["CI_RETENTION_WITHOUT_DELIVERY"]
+
+    expired_ci = db.session.scalars(
+        db.select(PhoneVerification)
+        .join(Verification, Verification.id == PhoneVerification.verification_id)
+        .where(
+            PhoneVerification.ci.is_not(None),
+            db.or_(
+                PhoneVerification.ci_first_delivered_at <= after_delivery,
+                db.and_(
+                    PhoneVerification.ci_first_delivered_at.is_(None),
+                    Verification.completed_at.is_not(None),
+                    Verification.completed_at <= without_delivery,
+                ),
+            ),
+        )
+    ).all()
+
+    leftover = db.session.scalars(
+        db.select(Verification)
+        .outerjoin(IdDocument, IdDocument.verification_id == Verification.id)
+        .outerjoin(FaceCheck, FaceCheck.verification_id == Verification.id)
+        .where(
+            Verification.status != "PENDING",
+            db.or_(IdDocument.s3_key.is_not(None), FaceCheck.s3_key.is_not(None)),
+        )
+        .distinct()
+    ).all()
+
+    click.echo(f"기준 시각 {kst_display(now)}")
+    click.echo(f"CI 파기 대상 {len(expired_ci)}건, 이미지 파기 대상 {len(leftover)}건")
+    if dry_run:
+        for row in expired_ci:
+            click.echo(f"  CI  {row.verification_id}")
+        for row in leftover:
+            click.echo(f"  IMG {row.id}")
+        click.echo("--dry-run이라 아무것도 지우지 않았다.")
+        return
+
+    delete_objects = not current_app.config.get("VULN_C10")
+    if not delete_objects:
+        click.echo("VULN_C10이 켜져 있다: DB 참조만 지우고 Storage 객체는 남긴다.")
+
+    for row in expired_ci:
+        row.ci = None
+        row.ci_purged_at = now
+        log_phone_event(row.verification_id, "CI_PURGED")
+        log_access("system", "PURGED", target_id=str(row.verification_id), reason="CI 보관기한 경과")
+
+    purged_images = 0
+    for verification in leftover:
+        purged_images += delete_verification_images(verification, delete_objects=delete_objects)
+        log_access("system", "PURGED", target_id=str(verification.id), reason="종결 건 이미지 파기")
+
+    db.session.commit()
+    click.echo(f"CI {len(expired_ci)}건, 이미지 참조 {purged_images}건을 파기했다.")
+
+
+@click.command("expire")
+@with_appcontext
+def expire_command() -> None:
+    """20분이 지난 PENDING 건을 P03으로 종결하고 결과 웹훅을 보낸다."""
+    from app.verify.termination import terminate
+
+    now = now_utc()
+    stale = db.session.scalars(
+        db.select(Verification).where(
+            Verification.status == "PENDING", Verification.expires_at <= now
+        )
+    ).all()
+
+    click.echo(f"기준 시각 {kst_display(now)} · 만료된 진행 건 {len(stale)}건")
+    for verification in stale:
+        terminate(verification, "P03")
+        click.echo(f"  P03 종결 {verification.id} (만료 {kst_display(verification.expires_at)})")
+    click.echo(f"{len(stale)}건을 종결했다.")

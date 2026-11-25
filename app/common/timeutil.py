@@ -30,6 +30,12 @@ def kst_isoformat(value: datetime | None) -> str | None:
     return kst.replace(microsecond=0).isoformat() if kst else None
 
 
+def kst_display(value: datetime | None) -> str:
+    """화면·다운로드용 '2026-11-25 10:30:00 +09:00' 문자열(D73)."""
+    kst = to_kst(value)
+    return kst.strftime("%Y-%m-%d %H:%M:%S %z").replace("+0900", "+09:00") if kst else "-"
+
+
 def seconds_left(deadline: datetime | None, now: datetime | None = None) -> float:
     """남은 초. 이미 지났으면 0."""
     if deadline is None:

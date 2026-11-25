@@ -1,0 +1,148 @@
+{% extends "admin/base.html" %}
+{% block title %}인증 상세{% endblock %}
+{% block content %}
+{% if request.args.get('error') == 'reason' %}
+<div class="alert alert-danger" role="alert">열람 사유를 5자 이상 입력한다.</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h2 class="h5 mb-1">인증 상세</h2>
+    <p class="text-secondary small mb-0">
+      {{ verification.id }} · {{ summary.client_name }} / {{ summary.client_user_ref }}
+    </p>
+  </div>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.verification_list') }}">목록</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 small">
+      <div class="col-6 col-md-3"><span class="text-secondary">stage</span><br>{{ verification.stage }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">status</span><br>{{ verification.status }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">사유 코드</span><br>{{ verification.reason_code or '-' }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">마지막 오류</span><br>{{ verification.last_error_code or '-' }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">요청</span><br>{{ verification.created_at | kst }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">만료</span><br>{{ verification.expires_at | kst }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">종결</span><br>{{ verification.completed_at | kst }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">얼굴 단계 시도</span><br>{{ verification.face_attempts }} / 3</div>
+    </div>
+    {% if summary.ci_mismatch %}
+    <div class="alert alert-warning mt-3 mb-0" role="alert">
+      X01 — 휴대폰 명의자와 신분증 명의자가 다르다(CI 불일치).
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<ul class="nav nav-tabs" role="tablist">
+  <li class="nav-item"><a class="nav-link active" href="#phone" data-bs-toggle="tab" role="tab">휴대폰</a></li>
+  <li class="nav-item"><a class="nav-link" href="#idcard" data-bs-toggle="tab" role="tab">신분증</a></li>
+  <li class="nav-item"><a class="nav-link" href="#face" data-bs-toggle="tab" role="tab">얼굴</a></li>
+  <li class="nav-item"><a class="nav-link" href="#webhook" data-bs-toggle="tab" role="tab">웹훅</a></li>
+</ul>
+
+<div class="tab-content bg-white border border-top-0 rounded-bottom p-3">
+  <section class="tab-pane fade show active" id="phone" role="tabpanel">
+    <div class="row g-3 small mb-3">
+      <div class="col-6 col-md-3"><span class="text-secondary">단계 상태</span><br>{{ phone_state.status }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">명의 대조 시도</span><br>{{ phone.match_attempts if phone else 0 }} / 3</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">인증번호 시도</span><br>{{ phone.otp_attempts if phone else 0 }} / 3</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">CI</span><br>{{ phone_state.ci_label }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">CI 첫 전달</span><br>{{ phone.ci_first_delivered_at | kst if phone else '-' }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">CI 파기</span><br>{{ phone.ci_purged_at | kst if phone else '-' }}</div>
+    </div>
+    <table class="table table-sm mb-0">
+      <thead class="table-light"><tr><th>시각</th><th>이벤트</th><th>코드</th><th>성명</th><th>휴대폰</th></tr></thead>
+      <tbody>
+        {% for event in events %}
+        <tr>
+          <td class="small text-nowrap">{{ event.occurred_at | kst }}</td>
+          <td class="small">{{ event.event_kind }}</td>
+          <td class="small">{{ event.result_code or '-' }}</td>
+          <td class="small">{{ event.name_mask or '-' }}</td>
+          <td class="small">{{ event.phone_mask or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">이력이 없다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="tab-pane fade" id="idcard" role="tabpanel">
+    {% if document_view.present %}
+    <div class="row g-3 small mb-3">
+      <div class="col-6 col-md-3"><span class="text-secondary">성명</span><br>{{ document_view.name_mask }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">주민번호</span><br>{{ document_view.rrn_mask }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">생년월일</span><br>{{ document_view.birth_date or '-' }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">발급일자</span><br>{{ document_view.issue_date or '-' }}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">CI 대조(X-01)</span><br>
+        {% if document_view.ci_matched is none %}-{% elif document_view.ci_matched %}통과{% else %}<span class="text-danger">불일치</span>{% endif %}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">진위확인</span><br>
+        {% if document_view.mois_matched is none %}-{% elif document_view.mois_matched %}통과{% else %}<span class="text-danger">불일치</span>{% endif %}</div>
+      <div class="col-6 col-md-3"><span class="text-secondary">이미지</span><br>{{ document_view.image_label }}</div>
+    </div>
+
+    {% if can_view_image %}
+    <form method="post" action="{{ url_for('admin.image_request', verification_id=verification.id) }}" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="kind" value="id_card">
+      <div class="col-12 col-md-8">
+        <label class="form-label small" for="reason">이미지 열람 사유 (필수, 5자 이상)</label>
+        <input class="form-control form-control-sm" type="text" id="reason" name="reason" required minlength="5">
+      </div>
+      <div class="col-12 col-md-4">
+        <button class="btn btn-sm btn-outline-danger w-100" type="submit">신분증 이미지 열람</button>
+      </div>
+    </form>
+    <p class="text-secondary small mt-2 mb-0">열람하면 사유와 함께 접속기록에 남는다.</p>
+    {% else %}
+    <p class="text-secondary small mb-0">auditor 역할은 이미지를 열람할 수 없다.</p>
+    {% endif %}
+    {% else %}
+    <p class="text-secondary small mb-0">신분증 단계 기록이 없다.</p>
+    {% endif %}
+  </section>
+
+  <section class="tab-pane fade" id="face" role="tabpanel">
+    <table class="table table-sm mb-0">
+      <thead class="table-light"><tr><th>시각</th><th>얼굴 수</th><th>유사도</th><th>일치</th><th>이미지</th></tr></thead>
+      <tbody>
+        {% for check in face_checks %}
+        <tr>
+          <td class="small text-nowrap">{{ check.created_at | kst }}</td>
+          <td class="small">{{ check.face_count if check.face_count is not none else '-' }}</td>
+          <td class="small">{{ check.similarity if check.similarity is not none else '-' }}</td>
+          <td class="small">{% if check.matched is none %}-{% elif check.matched %}일치{% else %}불일치{% endif %}</td>
+          <td class="small">{% if check.s3_key %}보관 중{% else %}파기됨{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">얼굴 대조 기록이 없다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="tab-pane fade" id="webhook" role="tabpanel">
+    <table class="table table-sm mb-0">
+      <thead class="table-light"><tr><th>전송 시각</th><th>주소</th><th>HTTP</th><th>재시도</th><th>본문 해시</th></tr></thead>
+      <tbody>
+        {% for row in callbacks %}
+        <tr>
+          <td class="small text-nowrap">{{ row.sent_at | kst }}</td>
+          <td class="small">{{ row.url }}</td>
+          <td class="small">{{ row.http_status or '전송 실패' }}</td>
+          <td class="small">{{ row.retry_count }}</td>
+          <td class="small font-monospace">{{ row.payload_hash[:16] }}…</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-secondary py-3">전송 기록이 없다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

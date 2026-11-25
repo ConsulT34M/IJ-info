@@ -19,9 +19,11 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.exceptions import HTTPException
 
 from app.common import secrets as secret_store
+from app.admin.auth import login_manager
 from app.common.face import build_face_matcher
 from app.common.log_mask import install_masking_filter
 from app.common.storage import build_storage
+from app.common.timeutil import kst_display
 from app.config import enabled_vuln_flags, init_app_config
 from app.models import db
 
@@ -49,6 +51,9 @@ def create_app(
     migrate.init_app(app, db)
     server_session.init_app(app)
     csrf.init_app(app)
+    login_manager.init_app(app)
+    # 화면·다운로드의 모든 시각은 KST(+09:00)로 표시한다(D73)
+    app.jinja_env.filters["kst"] = kst_display
 
     os.makedirs(app.config["UPLOAD_DIR"], mode=0o700, exist_ok=True)
     app.extensions["storage"] = build_storage(app.config)
@@ -111,6 +116,7 @@ def _register_security_headers(app: Flask) -> None:
 
 def _register_blueprints(app: Flask) -> None:
     """Blueprint 등록. api는 HMAC 서명으로 보호하므로 CSRF를 면제한다."""
+    from app.admin import bp as admin_bp
     from app.api import bp as api_bp
     from app.test_inbox import bp as test_inbox_bp
     from app.verify import bp as verify_bp
@@ -119,6 +125,7 @@ def _register_blueprints(app: Flask) -> None:
     csrf.exempt(api_bp)
     app.register_blueprint(verify_bp)
     app.register_blueprint(test_inbox_bp)
+    app.register_blueprint(admin_bp)
 
 
 # 이용자에게 보여줄 오류 문구. 내부 사정은 드러내지 않는다.
