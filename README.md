@@ -46,8 +46,7 @@ uv pip install -r requirements.txt
 # Docker Desktop을 띄워 둔다 (PostgreSQL 16 컨테이너용)
 ```
 
-**Windows는 WSL2(Ubuntu)를 권장한다.** `tools/demo_reset.sh`가 bash 스크립트이고 경로·권한
-처리가 리눅스 기준이다. WSL2 안에서 위와 같은 순서로 하면 그대로 동작한다.
+**Windows는 아래 [Windows에서 실행](#windows에서-실행) 절을 본다.** WSL2를 권장한다.
 
 ### 1) 초기화 (몇 번이고 다시 돌릴 수 있다)
 
@@ -107,6 +106,175 @@ print('auditor1', pyotp.TOTP(os.environ['AUDITOR1_TOTP_SECRET']).now())"
 ```bash
 .venv/bin/python tools/peek.py --latest
 ```
+
+---
+
+## Windows에서 실행
+
+**WSL2(Ubuntu)를 권장한다.** `tools/demo_reset.sh`가 bash 스크립트이고, 시크릿 파일 권한을
+`chmod 600`으로 보호하는 등 경로·권한 처리가 리눅스 기준이다. WSL2 안에서는 macOS와 똑같은
+명령이 그대로 동작한다. WSL 없이 쓰는 방법도 아래 B에 적었지만 제약이 있다.
+
+### A. WSL2 + Ubuntu (권장)
+
+**1) WSL2 설치** — PowerShell을 **관리자로** 열고:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+재부팅하면 Ubuntu 창이 떠서 사용자 이름·비밀번호를 만든다. 버전 확인:
+
+```powershell
+wsl -l -v        # VERSION 이 2 여야 한다. 1이면  wsl --set-version Ubuntu 2
+```
+
+> Windows 10은 2004(빌드 19041) 이상이어야 한다. 이미 WSL1 배포판이 있으면 위 명령으로 2로 올린다.
+
+**2) Docker Desktop for Windows 설치**
+
+- Settings → **General** → `Use the WSL 2 based engine` 체크
+- Settings → **Resources → WSL integration** → `Ubuntu` 토글 **ON**
+- Ubuntu 셸에서 `docker info` 가 나오면 성공이다(`docker: command not found` 면 위 토글이 꺼져 있다)
+
+**3) 저장소는 반드시 WSL 안(`~/`)에 클론한다**
+
+```bash
+sudo apt update && sudo apt install -y git curl
+cd ~
+git clone https://github.com/ConsulT34M/IJ-info.git
+cd IJ-info
+```
+
+> ### `/mnt/c/...`(윈도우 드라이브)에 두지 않는다
+> - NTFS에는 `chmod 600`이 실제로 적용되지 않는다 → **시크릿·TOTP 시크릿·가상 인물 파일이
+>   권한 보호 없이 놓인다.** 이 저장소는 그 권한에 기대고 있다.
+> - 디스크 I/O가 몇 배 느려서 `pytest`·`demo_reset.sh`가 체감되게 느려진다.
+> - 윈도우 탐색기에서 WSL 파일을 보려면 주소창에 `\\wsl$\Ubuntu\home\<사용자>\IJ-info` 를 넣는다.
+
+**4) 이후는 macOS와 동일하다**
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.bashrc                       # 또는 셸을 다시 열기
+uv python install 3.11
+uv venv --python 3.11
+uv pip install -r requirements.txt
+cp .env.example .env
+bash tools/demo_reset.sh
+```
+
+**5) 터미널 3개** — Windows Terminal에서 Ubuntu 탭을 3개 열고 위
+[터미널 3개](#2-터미널-3개) 표의 명령을 그대로 쓴다.
+
+**6) 브라우저** — Windows 쪽 Chrome/Edge에서 `http://127.0.0.1:8000` 을 그대로 열면 된다
+(WSL2가 localhost를 포워딩한다). 열리지 않으면:
+
+```bash
+# WSL 안에서 접근되는지 먼저 확인
+curl http://127.0.0.1:8000/healthz
+```
+
+- WSL 안에서는 되는데 윈도우에서 안 되면 `wsl --shutdown` 후 다시 띄운다.
+- 그래도 안 되면 `FLASK_RUN_HOST=0.0.0.0 .venv/bin/flask run` 으로 띄우고
+  `hostname -I` 로 나온 WSL IP로 접속한다. WSL2는 NAT 뒤에 있어 그 주소는 이 PC에서만
+  닿지만, **실습이 끝나면 `127.0.0.1`로 되돌린다.**
+- 모의 통신사(8443)는 A사 앱이 WSL 안에서만 호출하므로 브라우저에서 열 필요가 없다.
+
+**7) 편집기** — VS Code + **WSL 확장**을 깔고 프로젝트 폴더에서 `code .` 를 하면
+윈도우 VS Code가 WSL 안의 파일을 직접 편집한다(파일을 윈도우로 복사하지 않는다).
+
+### B. WSL 없이 Windows에서 직접 (제약 있음)
+
+앱 실행·pytest·모의 통신사·가짜 거래소는 PowerShell에서도 동작한다. 다만:
+
+| 항목 | 상태 |
+|---|---|
+| `tools/demo_reset.sh` | **PowerShell에서 실행 안 된다.** Git Bash에서는 대체로 돌아가지만 검증하지 않았다 → 아래 수동 절차를 쓴다 |
+| `chmod 600` (시크릿 파일 권한) | NTFS에서는 의미 있게 적용되지 않는다. `instance\` 안의 시크릿·관리자 TOTP 시크릿이 **권한으로 보호되지 않는다** |
+| 한글 출력 | 레거시 콘솔에서 깨질 수 있다. `$env:PYTHONUTF8 = "1"` 를 먼저 설정하거나 Windows Terminal을 쓴다 |
+
+준비:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # uv 설치
+uv python install 3.11
+uv venv --python 3.11
+uv pip install -r requirements.txt
+Copy-Item .env.example .env
+$env:PYTHONUTF8 = "1"
+$env:FLASK_APP = "app"
+```
+
+초기화 — `demo_reset.sh`와 같은 순서를 손으로 한다:
+
+```powershell
+docker compose up -d
+
+# (다시 초기화할 때만) A사 DB 비우기
+docker compose exec -T db psql -U ekyc -d ekyc -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+# 팀 공용 가상 인물 10명을 작업 위치로 복사
+Copy-Item samples\people.json seed\people.json
+
+.venv\Scripts\flask.exe db upgrade
+.venv\Scripts\flask.exe seed
+
+.venv\Scripts\python.exe -m carrier.make_certs
+.venv\Scripts\python.exe -m carrier.seed
+
+# 아래 두 명령이 출력하는 API Key·HMAC Secret·TOTP URI는 한 번만 보여준다. 바로 보관한다
+.venv\Scripts\flask.exe create-client --name "SILO 거래소" `
+  --callback-url http://127.0.0.1:9000/callback --allowed-ips 127.0.0.1
+.venv\Scripts\flask.exe create-admin --login-id admin1  --role admin   --allowed-ips 127.0.0.1
+.venv\Scripts\flask.exe create-admin --login-id auditor1 --role auditor --allowed-ips 127.0.0.1
+
+.venv\Scripts\python.exe tools\make_sample_images.py --extras
+```
+
+터미널 3개(PowerShell 창 3개):
+
+```powershell
+# ① 모의 통신사
+.venv\Scripts\python.exe -m carrier
+
+# ② A사 앱
+$env:FLASK_APP = "app"; .venv\Scripts\flask.exe run
+
+# ③ 가짜 거래소 (위 create-client 출력값을 넣는다)
+$env:EKYC_API_KEY = "..."; $env:EKYC_HMAC_SECRET = "..."
+.venv\Scripts\python.exe tools\fake_exchange.py serve
+```
+
+자주 쓰는 것:
+
+```powershell
+# 가상 인물 값 (1을 사람 번호로 바꾼다)
+.venv\Scripts\python.exe -c "import json;p={x['person_no']:x for x in json.load(open('seed/people.json',encoding='utf-8'))['people']}[1];print(p['name'],p['phone_number'],p['rrn'],p['issue_date'],p['inbox_key'])"
+
+# 관리자 TOTP 코드 (create-admin이 출력한 otpauth URI의 secret= 값)
+.venv\Scripts\python.exe -c "import pyotp;print(pyotp.TOTP('<시크릿>').now())"
+
+# 건 하나 들여다보기
+.venv\Scripts\python.exe tools\peek.py --latest
+
+# 테스트
+.venv\Scripts\python.exe -m pytest -q
+```
+
+### Windows에서 자주 걸리는 것
+
+| 증상 | 원인·해결 |
+|---|---|
+| `bash: $'\r': command not found` | 스크립트가 CRLF로 받아졌다. `.gitattributes`가 막아 주지만, 이미 그렇게 받았다면 `git config --global core.autocrlf input` 후 다시 클론하거나 `sed -i 's/\r$//' tools/demo_reset.sh` |
+| WSL에서 `docker: command not found` | Docker Desktop → Resources → WSL integration에서 Ubuntu 토글이 꺼져 있다 |
+| `demo_reset.sh`가 "docker 데몬이 꺼져 있다"로 멈춘다 | Docker Desktop을 먼저 띄운다(트레이 아이콘이 초록색) |
+| 포트 8000이 사용 중 | 다른 프로그램이 쓰고 있다. `netstat -ano \| findstr :8000` 으로 PID를 찾는다 |
+| 포트 5432가 사용 중 | 윈도우에 PostgreSQL이 따로 설치돼 있다. 그 서비스를 멈추거나 `docker-compose.yml`의 포트를 `127.0.0.1:55432:5432`로 바꾸고 `.env`의 `EKYC_SECRET_EKYC_DB`로 접속 주소를 맞춘다 |
+| 한글이 `?`나 깨진 글자로 보인다 | `$env:PYTHONUTF8 = "1"` 설정 후 다시 실행. Windows Terminal 사용 권장 |
+| `flask: 명령을 찾을 수 없음` | 가상환경 경로가 리눅스와 다르다. Windows는 `.venv\Scripts\flask.exe`(리눅스·macOS는 `.venv/bin/flask`) |
+| 첫 `flask run`에서 방화벽 창이 뜬다 | `127.0.0.1`에만 바인딩하므로 **허용하지 않아도 된다**. 취소해도 로컬 접속은 된다 |
+| 파일 저장이 느리고 `pytest`가 오래 걸린다 | 저장소가 `/mnt/c/...`에 있다. WSL 홈(`~/`)으로 옮긴다 |
 
 ---
 

@@ -2,6 +2,10 @@
 
 격리된 실습 환경 전용이다. 가상 인물 10명과 가짜 번호·체크섬만 맞춘 가상 주민번호만 쓴다.
 
+> **Windows 사용자**는 먼저 [README의 "Windows에서 실행"](../README.md#windows에서-실행)을 본다.
+> 아래 명령의 `.venv/bin/...`은 macOS·WSL2 기준이고, WSL 없이 PowerShell에서 쓸 때는
+> `.venv\Scripts\...`로 바꿔 읽는다.
+
 ---
 
 ## 1. 초기화

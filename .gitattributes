@@ -1,0 +1,6 @@
+# 윈도우에서 클론해도 셸 스크립트는 LF를 유지한다.
+# (CRLF로 받으면 WSL/Git Bash에서 `bash: $'\r': command not found` 가 난다)
+* text=auto
+*.sh text eol=lf
+*.png -text
+*.jpg -text
