@@ -310,7 +310,7 @@ access_logs.action: REQUEST_RECEIVED, RESULT_QUERIED, CALLBACK_SENT, CI_MISMATCH
 | 4 | carrier 앱(MC-01·02, TLS, 클라이언트 키), IA-04·05·06, phone_events | 가상 인물로 CI 수령, stage=ID_CARD |
 | 5 | IA-07, IA-08 (체크섬 → X-01 → 진위확인), Storage·FaceMatcher 인터페이스 | 같은 인물 통과 / 다른 인물 섞으면 X01 / 9번 인물 E03 |
 | 6 | IA-09, 최종 판정, IA-11 웹훅, IA-12, 결과 화면 | **가짜 거래소가 SUCCEEDED 웹훅 수신 = 성공 경로 완주** |
-| 7 | 실패 경로 전부 (P01~P05, E01~E06, X01, 만료, 취소, 동시 제출) | 사유 코드별 웹훅·HTTP 응답 테스트 |
+| 7 | 실패 경로 전부 (P01\~P05, E01\~E06, X01, 만료, 취소, 동시 제출) | 사유 코드별 웹훅·HTTP 응답 테스트 |
 | 8 | 관리자 콘솔, access_logs, purge·expire | 조회·열람·파기가 로그에 남음 |
 | 9 | 취약 플래그 6개 + 플래그별 테스트 쌍 | 기본값 전부 양호, 켜면 해당 동작만 바뀜 |
 
