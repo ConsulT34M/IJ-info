@@ -26,7 +26,7 @@ docker compose up -d                   # PostgreSQL 16 (127.0.0.1:5432에만 바
 .venv/bin/python seed/make_people.py   # 가상 인물 10명 → seed/people.json (마스킹 요약만 출력)
 .venv/bin/flask db upgrade             # 13개 테이블 생성
 .venv/bin/flask seed                   # 개발용 시크릿 + 진위확인 대장 + 테스트 수신함 적재
-.venv/bin/flask run                    # http://127.0.0.1:5000/healthz
+.venv/bin/flask run                    # http://127.0.0.1:8000/healthz (D38)
 ```
 
 위탁사·관리자 등록 (API Key·HMAC Secret·TOTP URI는 **생성 시 한 번만** 출력된다):
@@ -36,10 +36,29 @@ docker compose up -d                   # PostgreSQL 16 (127.0.0.1:5432에만 바
 .venv/bin/flask create-admin --login-id admin1 --role admin --allowed-ips 127.0.0.1
 ```
 
+## 인증 흐름 확인 (가짜 거래소)
+
+`tools/fake_exchange.py`는 거래소 담당에게 넘기는 서명 구현 예시다. A사 코드를 import하지 않는다.
+
+```bash
+# create-client가 출력한 값을 넣는다
+export EKYC_API_KEY=... EKYC_HMAC_SECRET=...
+
+.venv/bin/python tools/fake_exchange.py serve     # 터미널 1: 웹훅 수신·서명 검증
+.venv/bin/python tools/fake_exchange.py request --client-user-ref user-0001   # 터미널 2
+# 출력된 auth_url을 브라우저에서 연다 → 동의 → 휴대폰 입력 화면
+.venv/bin/python tools/fake_exchange.py query <verification_id>               # IA-12 (6단계)
+```
+
 ## 테스트
 
 ```bash
-.venv/bin/python -m pytest -q   # DB는 SQLite 메모리를 쓴다(docker 없이도 돈다)
+.venv/bin/python -m pytest -q                     # SQLite 메모리 (docker 없이도 돈다)
+
+# PostgreSQL로 돌리기 (별도 테스트 DB). @pytest.mark.postgres 테스트도 함께 돈다
+docker compose exec -T db psql -U ekyc -d postgres -c "CREATE DATABASE ekyc_test OWNER ekyc;"
+TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
+  .venv/bin/python -m pytest -q
 ```
 
 `seed/people.json`, `instance/`, 인증서, 업로드 파일은 커밋하지 않는다(.gitignore).

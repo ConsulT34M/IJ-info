@@ -113,6 +113,7 @@ def init_app_config(app, overrides: dict | None = None) -> None:
         EKYC_ENV=env_name,
         TRUST_PROXY=env_bool("TRUST_PROXY", False),
         TEST_INBOX_ALLOWED_IPS=env_list("TEST_INBOX_ALLOWED_IPS", ["127.0.0.1", "::1"]),
+        PUBLIC_BASE_URL=os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:8000"),
         CARRIER_BASE_URL=os.environ.get("CARRIER_BASE_URL", "https://localhost:8443"),
         CARRIER_CA_BUNDLE=os.environ.get("CARRIER_CA_BUNDLE", "carrier/certs/carrier.crt"),
         # D22: 로컬 http 개발에서만 Secure를 끈다. production은 반드시 True.

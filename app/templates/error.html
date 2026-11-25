@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}진행할 수 없음{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <h2 class="h5 card-title">진행할 수 없다</h2>
+    <p class="card-text">{{ message }}</p>
+    <p class="text-secondary small mb-0">오류 코드: {{ code }}</p>
+  </div>
+</div>
+{% endblock %}

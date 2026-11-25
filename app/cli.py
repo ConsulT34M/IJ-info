@@ -12,8 +12,6 @@ import json
 import uuid
 from datetime import date
 from pathlib import Path
-from urllib.parse import urlparse
-
 import bcrypt
 import click
 import pyotp
@@ -24,6 +22,7 @@ from app.common.crypto import aad, encrypt_str, hmac_sha256_hex, sha256_hex
 from app.common.hmac_auth import api_key_hash, generate_api_key, generate_hmac_secret
 from app.common.log_mask import mask_name, mask_phone, mask_rrn
 from app.common.rrn import normalize_rrn
+from app.common.urls import allowed_schemes, parse_absolute_url
 from app.models import Admin, Client, MockMoisRegistry, TestPhone, db
 
 PEOPLE_FILE = Path(__file__).resolve().parents[1] / "seed" / "people.json"
@@ -131,9 +130,9 @@ def seed_command(people_path: Path) -> None:
 @with_appcontext
 def create_client_command(name: str, callback_url: str, allowed_ips: str) -> None:
     """위탁사를 등록한다. API Key와 HMAC Secret은 이때 한 번만 출력된다."""
-    parsed = urlparse(callback_url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise click.ClickException("callback_url이 http(s) 절대 주소가 아니다.")
+    if parse_absolute_url(callback_url) is None:
+        schemes = ", ".join(allowed_schemes())
+        raise click.ClickException(f"callback_url이 허용된 절대 주소가 아니다(허용 스킴: {schemes}).")
     ips = _parse_ips(allowed_ips)
 
     if db.session.scalars(db.select(Client).filter_by(name=name)).one_or_none():

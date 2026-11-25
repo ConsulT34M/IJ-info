@@ -13,6 +13,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - ekyc-pgdata:/var/lib/postgresql/data
+      # 새 볼륨으로 처음 올릴 때 pytest용 ekyc_test DB를 만든다
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ekyc -d ekyc"]
       interval: 5s

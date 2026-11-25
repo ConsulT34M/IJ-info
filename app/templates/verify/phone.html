@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}휴대폰 본인확인{% endblock %}
+{% block content %}
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5 card-title">휴대폰 본인확인</h2>
+    <p class="card-text text-secondary small">
+      통신사에 등록된 명의와 대조한다. 남은 시간 약 {{ seconds_left // 60 }}분.
+    </p>
+
+    <form method="post" action="{{ url_for('verify.phone_page') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="name">성명</label>
+        <input class="form-control" type="text" id="name" name="name" maxlength="50" autocomplete="off" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="phone_number">휴대폰번호</label>
+        <input class="form-control" type="tel" id="phone_number" name="phone_number"
+               maxlength="13" inputmode="numeric" autocomplete="off" placeholder="01012345678" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100" disabled>인증번호 받기 (4단계에서 연결)</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('verify.cancel') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="btn btn-outline-secondary w-100">취소하고 돌아가기</button>
+</form>
+{% endblock %}

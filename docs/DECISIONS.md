@@ -209,3 +209,84 @@ DB 컬럼은 tz 없는 `DateTime`이고 값은 항상 UTC다(PostgreSQL·SQLite�
 ## D28. 약관 버전은 `v1.0` 고정
 
 `Config.CONSENT_VERSIONS`에 동의 4종의 버전을 둔다. 동의 기록(`consents.version`)에 그대로 들어간다.
+
+---
+
+## 3단계 구현 세부
+
+## D29. production은 https만 받는다
+
+`EKYC_ENV=production`이면 `flask create-client`의 `callback_url`과 IA-01의 `return_url`은
+**https만** 허용한다. dev는 로컬 테스트 때문에 http도 받는다. 판정은 `common/urls.allowed_schemes()`
+한 곳에서만 한다. 결과 웹훅과 이용자 복귀가 평문으로 나가면 CI·판정 결과가 노출되기 때문이다.
+
+## D30. `app/common/urls.py` 추가
+
+`allowed_schemes()`(D29), `parse_absolute_url()`, `same_origin()`(D5)를 모았다. 스킴 정책과
+오픈 리다이렉트 판정이 코드 여러 곳에 흩어지지 않게 한다.
+
+## D31. 웹훅 전송 모듈(IA-11)을 3단계에 먼저 만들었다
+
+명세 17장은 IA-11을 6단계로 두지만, 3단계에 이미 **만료(P03)·취소(P04) 종결**이 있어 그 시점에
+결과 웹훅을 보내야 한다. `app/api/webhook.py`에 payload 생성(7장)과 서명 전송을 함께 넣고,
+6단계에서 성공 payload와 IA-12가 같은 함수를 쓴다.
+
+- 웹훅 헤더는 `X-Timestamp`, `X-Signature`, `Content-Type`만 보낸다(`X-Api-Key`는 보내지 않는다).
+- 서명 대상 바이트는 `json.dumps(..., ensure_ascii=False, separators=(",", ":"))`의 결과다.
+  거래소는 **받은 본문 바이트 그대로** 검증해야 한다(재직렬화하면 서명이 깨진다).
+- 이미 `callbacks` 행이 있으면 다시 보내지 않는다(1회 전송).
+
+## D32. `app/common/audit.py` 추가
+
+`log_access()`, `log_phone_event()` INSERT 헬퍼. commit은 호출부에서 해서 같은 트랜잭션에 묶는다.
+
+## D33. 허용 IP 아님은 403
+
+API Key·서명·타임스탬프 실패는 401, `clients.allowed_ips`에 없는 IP는 **403**으로 구분한다.
+10장 표에 없던 선택이다. 서버 간 통신이라 구분해도 공격자에게 주는 정보가 없고, 거래소 쪽 설정
+오류를 빨리 찾을 수 있다.
+
+## D34. 재진입은 현재 stage 화면으로 보낸다
+
+IA-02는 명세대로 보통 `/verify/consent`로 보내지만, 진행 중인 건에 토큰을 재발급해 다시 들어온
+경우에는 `stage_redirect()`가 **그 건의 현재 stage 화면**으로 보낸다. 중간 실패 시 단계를 재사용하는
+것이 아니라(그건 명세 제외 항목), 종결되지 않은 건의 현재 위치로 돌아가는 것이다.
+
+## D35. `auth_url`은 `PUBLIC_BASE_URL`로 만든다
+
+IA-01은 거래소 서버가 호출하므로 요청의 Host 헤더를 믿을 수 없다. `PUBLIC_BASE_URL`
+환경변수(기본 `http://127.0.0.1:8000`)로 `auth_url`을 만든다.
+
+## D36. 인증창 토큰에 만료 시각을 담는다 (컬럼 추가 없음)
+
+토큰 형식은 `{만료 유닉스초}.{임의값 43자}`이고 DB에는 **토큰 전체의 sha256**만 둔다.
+만료 시각을 고치면 해시가 달라져 조회되지 않으므로, `token_issued_at` 컬럼 없이 10분 제한이 성립한다.
+검사 순서: 형식 → 만료 → 조건부 원자적 UPDATE(`token_used_at IS NULL AND status='PENDING'`)로 1회 사용.
+실패 사유(없는 토큰·사용된 토큰·만료)는 구분하지 않고 **모두 410**으로 답한다(오라클 제거).
+
+## D37. pytest를 PostgreSQL로도 돌린다
+
+`TEST_DATABASE_URL`이 있으면 그 DB로, 없으면 SQLite 메모리로 돌린다(기본). PostgreSQL로 돌릴 때는
+세션 시작에 스키마를 한 번 만들고 테스트마다 `TRUNCATE ... RESTART IDENTITY CASCADE`로 비운다.
+`@pytest.mark.postgres`를 붙인 테스트(7단계 동시 제출 등)는 SQLite에서는 skip된다.
+
+```bash
+.venv/bin/python -m pytest -q                                   # SQLite
+TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
+  .venv/bin/python -m pytest -q                                 # PostgreSQL
+```
+
+## D38. 로컬 포트는 8000
+
+맥 AirPlay 수신이 5000을 쓰므로 `FLASK_RUN_PORT=8000`으로 띄운다(운영 형태의 Gunicorn
+127.0.0.1:8000과도 같다). `PUBLIC_BASE_URL`과 `tools/fake_exchange.py` 기본값도 8000이다.
+
+## D39. 인증창 진입 때 세션을 새로 만들고, 종결 때 nonce를 지운다
+
+IA-02에서 `session.clear()` 후 세션 ID를 재생성한다(세션 고정 방지). 종결(`terminate`) 시
+`entry_nonce`를 NULL로 두어 열려 있던 탭이 더 쓰이지 못하게 한다(D7의 짝).
+
+## D40. 약관 버전은 화면에 내보낸 값과 서버 값을 대조한다
+
+동의 화면은 `Config.CONSENT_VERSIONS`를 hidden 필드로 내보내고, IA-03은 받은 값이 서버 값과
+다르면 400으로 돌려보낸다(약관 갱신 중 제출된 동의를 기록하지 않기 위해). 기록에는 항상 서버 값을 쓴다.

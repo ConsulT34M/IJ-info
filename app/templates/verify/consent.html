@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}동의{% endblock %}
+{% block content %}
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5 card-title">필수 동의</h2>
+    <p class="card-text text-secondary small">
+      아래 4가지에 모두 동의해야 본인확인을 진행할 수 있다. 남은 시간 약 {{ seconds_left // 60 }}분.
+    </p>
+
+    <form method="post" action="{{ url_for('verify.consent_submit') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="collect" id="collect">
+        <input type="hidden" name="collect_version" value="{{ versions['collect'] }}">
+        <label class="form-check-label" for="collect">
+          <strong>개인정보 수집·이용 동의</strong> ({{ versions['collect'] }})<br>
+          <span class="text-secondary small">성명, 휴대폰번호, 주민등록번호, 신분증·얼굴 이미지를 본인확인 목적으로 수집·이용한다.</span>
+        </label>
+      </div>
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="uid" id="uid">
+        <input type="hidden" name="uid_version" value="{{ versions['uid'] }}">
+        <label class="form-check-label" for="uid">
+          <strong>고유식별정보 처리 동의</strong> ({{ versions['uid'] }})<br>
+          <span class="text-secondary small">주민등록번호를 본인확인에 한해 처리한다.</span>
+        </label>
+      </div>
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="carrier_terms" id="carrier_terms">
+        <input type="hidden" name="carrier_terms_version" value="{{ versions['carrier_terms'] }}">
+        <label class="form-check-label" for="carrier_terms">
+          <strong>통신사 본인확인 서비스 이용약관 동의</strong> ({{ versions['carrier_terms'] }})<br>
+          <span class="text-secondary small">휴대폰 명의 대조와 연계정보(CI) 발급을 위해 통신사에 정보를 제공한다.</span>
+        </label>
+      </div>
+
+      <div class="form-check mb-4">
+        <input class="form-check-input" type="checkbox" name="biometric" id="biometric">
+        <input type="hidden" name="biometric_version" value="{{ versions['biometric'] }}">
+        <label class="form-check-label" for="biometric">
+          <strong>생체정보(얼굴) 처리 동의</strong> ({{ versions['biometric'] }})<br>
+          <span class="text-secondary small">신분증 사진과 얼굴 사진을 대조하고, 판정 직후 이미지를 파기한다.</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary w-100">위 내용에 모두 동의하고 진행</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('verify.cancel') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="btn btn-outline-secondary w-100">취소하고 돌아가기</button>
+</form>
+{% endblock %}

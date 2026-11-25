@@ -1,0 +1,4 @@
+/* CSP가 inline style을 막으므로 폭 제한 같은 것도 여기에 둔다. */
+.ekyc-shell {
+  max-width: 640px;
+}

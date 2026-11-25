@@ -12,10 +12,11 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template, request
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.exceptions import HTTPException
 
 from app.common import secrets as secret_store
 from app.common.log_mask import install_masking_filter
@@ -49,6 +50,7 @@ def create_app(
     os.makedirs(app.config["UPLOAD_DIR"], mode=0o700, exist_ok=True)
 
     _register_security_headers(app)
+    _register_error_handlers(app)
     _register_blueprints(app)
     _register_cli(app)
 
@@ -103,8 +105,46 @@ def _register_security_headers(app: Flask) -> None:
 
 
 def _register_blueprints(app: Flask) -> None:
-    """Blueprint는 구현 단계마다 여기에 추가한다(3단계~)."""
-    return None
+    """Blueprint 등록. api는 HMAC 서명으로 보호하므로 CSRF를 면제한다."""
+    from app.api import bp as api_bp
+    from app.verify import bp as verify_bp
+
+    app.register_blueprint(api_bp)
+    csrf.exempt(api_bp)
+    app.register_blueprint(verify_bp)
+
+
+# 이용자에게 보여줄 오류 문구. 내부 사정은 드러내지 않는다.
+ERROR_MESSAGES = {
+    400: "입력값을 확인한다.",
+    401: "인증에 실패했다.",
+    403: "지금 단계에서는 할 수 없는 요청이다.",
+    404: "요청한 건을 찾을 수 없다.",
+    409: "이미 끝난 건이다. 거래소에서 다시 시작한다.",
+    410: "인증 제한 시간이 지났거나 이미 사용한 주소다. 거래소에서 다시 시작한다.",
+    413: "파일이 너무 크다.",
+    429: "잠시 후 다시 시도한다.",
+    500: "처리 중 문제가 생겼다.",
+    503: "아직 사용할 수 없는 기능이다.",
+}
+
+
+def _register_error_handlers(app: Flask) -> None:
+    """api는 JSON, 인증창은 화면으로 돌려준다."""
+
+    @app.errorhandler(HTTPException)
+    def _handle(exc: HTTPException):
+        code = exc.code or 500
+        message = exc.description if _has_custom_description(exc) else ERROR_MESSAGES.get(code, exc.name)
+        if request.blueprint == "api" or request.path.startswith("/api/"):
+            return jsonify(error=exc.name, code=code, message=message), code
+        return render_template("error.html", code=code, message=message), code
+
+
+def _has_custom_description(exc: HTTPException) -> bool:
+    """abort(..., description=...)로 직접 넣은 문구인지 본다."""
+    default = HTTPException(description=None).description
+    return bool(exc.description) and exc.description != default and len(exc.description) < 200
 
 
 def _register_cli(app: Flask) -> None:
