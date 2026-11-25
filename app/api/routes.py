@@ -51,21 +51,21 @@ def create_verification():
     """
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        abort(400, description="JSON 본문이 필요하다.")
+        abort(400, description="JSON 본문이 필요합니다.")
 
     client_user_ref = payload.get("client_user_ref")
     if not isinstance(client_user_ref, str) or not client_user_ref.strip():
-        abort(400, description="client_user_ref가 필요하다.")
+        abort(400, description="client_user_ref가 필요합니다.")
     client_user_ref = client_user_ref.strip()
     if len(client_user_ref) > MAX_CLIENT_USER_REF:
-        abort(400, description="client_user_ref가 너무 길다.")
+        abort(400, description="client_user_ref가 너무 깁니다.")
 
     return_url = payload.get("return_url")
     if parse_absolute_url(return_url) is None:
-        abort(400, description="return_url이 허용된 절대 주소가 아니다.")
+        abort(400, description="return_url이 허용된 절대 주소가 아닙니다.")
     # D5: 오픈 리다이렉트 방지. callback_url과 같은 origin만 받는다
     if not same_origin(return_url, g.client.callback_url):
-        abort(400, description="return_url은 callback_url과 같은 origin이어야 한다.")
+        abort(400, description="return_url은 callback_url과 같은 origin이어야 합니다.")
 
     existing = db.session.scalars(
         db.select(Verification)
@@ -129,7 +129,7 @@ def read_verification(verification_id):
     """
     verification = db.session.get(Verification, verification_id)
     if verification is None:
-        abort(404, description="해당 건이 없다.")
+        abort(404, description="해당 건을 찾을 수 없습니다.")
 
     if not current_app.config.get("VULN_W08") and verification.client_id != g.client.id:
         current_app.logger.warning(
@@ -137,7 +137,7 @@ def read_verification(verification_id):
             g.client.id,
             verification_id,
         )
-        abort(404, description="해당 건이 없다.")
+        abort(404, description="해당 건을 찾을 수 없습니다.")
 
     payload = build_result_payload(verification)
     phone = verification.phone

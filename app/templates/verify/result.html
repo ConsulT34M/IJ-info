@@ -4,11 +4,11 @@
 <div class="card mb-3">
   <div class="card-body">
     {% if status == "SUCCEEDED" %}
-    <h2 class="h5 card-title text-success">본인확인이 완료됐다</h2>
-    <p class="card-text">신분증과 얼굴 대조까지 모두 확인했다. 결과는 요청한 서비스로 전달된다.</p>
+    <h2 class="h5 card-title text-success">본인확인이 완료되었습니다</h2>
+    <p class="card-text">신분증과 얼굴 대조까지 모두 확인했습니다. 결과는 요청하신 서비스로 전달됩니다.</p>
     {% else %}
-    <h2 class="h5 card-title text-danger">본인확인을 완료하지 못했다</h2>
-    <p class="card-text">요청한 서비스에서 처음부터 다시 진행한다.</p>
+    <h2 class="h5 card-title text-danger">본인확인을 완료하지 못했습니다</h2>
+    <p class="card-text">요청하신 서비스에서 처음부터 다시 진행해 주세요.</p>
     {% endif %}
     <p class="text-secondary small mb-0">판정 코드: {{ reason_code }}</p>
   </div>

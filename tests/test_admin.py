@@ -62,7 +62,7 @@ def test_wrong_password_counts_up_and_locks(app, make_admin):
         assert db.session.scalars(db.select(Admin)).one().failed_count == expected
 
     locked = login_attempt(http, "admin1", "wrong-password")
-    assert locked.status_code == 401 and "잠겼다" in locked.get_data(as_text=True)
+    assert locked.status_code == 401 and "잠겼습니다" in locked.get_data(as_text=True)
 
     db.session.expire_all()
     row = db.session.scalars(db.select(Admin)).one()
@@ -94,7 +94,7 @@ def test_unknown_account_does_not_reveal_itself(app, make_admin):
     http = app.test_client()
     response = login_attempt(http, "nobody", "verylongpassword1")
     assert response.status_code == 401
-    assert "올바르지 않다" in response.get_data(as_text=True)
+    assert "올바르지 않습니다" in response.get_data(as_text=True)
 
 
 def test_admin_ip_allowlist(app, admin_session):
@@ -294,7 +294,7 @@ def test_auditor_detail_hides_the_image_form(admin_session, flow, carrier_backen
     flow.upload_id_card()
     account = admin_session(login_id="auditor1", role="auditor")
     body = account["http"].get(f"/admin/verifications/{flow.verification_id}").get_data(as_text=True)
-    assert "auditor 역할은 이미지를 열람할 수 없다" in body
+    assert "auditor 역할은 이미지를 열람하실 수 없습니다" in body
 
 
 def test_role_change_is_logged(admin_session, make_admin):

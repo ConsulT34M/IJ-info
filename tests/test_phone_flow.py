@@ -114,9 +114,9 @@ def test_name_mismatch_and_unknown_number_look_the_same(flow, carrier_backend, p
     assert wrong_name.status_code == unknown_number.status_code == 200
     first = wrong_name.get_data(as_text=True)
     second = unknown_number.get_data(as_text=True)
-    assert "성명 또는 휴대폰번호가 일치하지 않는다" in first
+    assert "성명 또는 휴대폰번호가 일치하지 않습니다" in first
     assert "등록되지 않은" not in first and "등록되지 않은" not in second
-    assert "명의자와 다르다" not in first
+    assert "명의자와 다릅니다" not in first
 
     verification = db.session.get(Verification, flow.verification_id)
     assert verification.last_error_code == "P01"  # D8
@@ -276,7 +276,7 @@ def test_expired_code_is_not_a_mismatch(flow, carrier_backend, person):
 
     response = flow.confirm_otp(code)
     assert response.status_code == 400
-    assert "만료" in response.get_data(as_text=True)
+    assert "유효시간이 지났습니다" in response.get_data(as_text=True)
     assert db.session.get(PhoneVerification, flow.verification_id).otp_attempts == 0
 
 
@@ -311,7 +311,7 @@ def test_confirm_without_an_issued_code(flow, carrier_backend, person):
     flow.to_phone()
     response = flow.confirm_otp("123456")
     assert response.status_code == 400
-    assert "인증번호를 먼저 받는다" in response.get_data(as_text=True)
+    assert "인증번호를 먼저 받아 주세요" in response.get_data(as_text=True)
 
 
 def test_logs_do_not_contain_the_code_or_the_number(flow, carrier_backend, person, caplog):

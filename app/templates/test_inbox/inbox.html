@@ -2,7 +2,7 @@
 {% block title %}테스트 문자 수신함{% endblock %}
 {% block content %}
 <div class="alert alert-warning" role="alert">
-  실습 전용 화면이다. 실제 문자 발송 대신 인증번호를 여기서 꺼내 본다. 진단 범위에서 제외한다.
+  실습 전용 화면입니다. 실제 문자 발송 대신 인증번호를 여기에서 확인합니다. 진단 범위에서는 제외됩니다.
 </div>
 
 {% if error %}
@@ -28,7 +28,7 @@
         <input class="form-control" type="text" id="inbox_key" name="inbox_key"
                autocomplete="off" required>
         <div class="form-text">seed/people.json의 inbox_key, 또는 모의 PASS 앱
-          (<code>tools/pass_app.py register</code>)이 발급받은 키다.</div>
+          (<code>tools/pass_app.py register</code>)으로 발급받은 키를 입력해 주세요.</div>
       </div>
       <button type="submit" class="btn btn-primary w-100">최근 인증번호 보기</button>
     </form>

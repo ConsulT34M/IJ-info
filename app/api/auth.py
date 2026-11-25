@@ -22,20 +22,20 @@ def require_client_auth(view):
     def wrapper(*args, **kwargs):
         api_key = request.headers.get("X-Api-Key", "")
         if not api_key:
-            abort(401, description="API Key가 없다.")
+            abort(401, description="API Key가 없습니다.")
 
         client = db.session.scalars(
             db.select(Client).filter_by(api_key_hash=api_key_hash(api_key))
         ).one_or_none()
         if client is None or client.status != "ACTIVE":
             current_app.logger.warning("API Key 거부: ip=%s", client_ip())
-            abort(401, description="API Key가 올바르지 않다.")
+            abort(401, description="API Key가 올바르지 않습니다.")
 
         if not ip_allowed(client_ip(), client.allowed_ips):
             current_app.logger.warning(
                 "허용되지 않은 IP: client_id=%s ip=%s", client.id, client_ip()
             )
-            abort(403, description="허용되지 않은 IP다.")
+            abort(403, description="허용되지 않은 IP입니다.")
 
         error = verify_signed_request(
             secret_store.get_secret(client.hmac_secret_ref),
@@ -46,7 +46,7 @@ def require_client_auth(view):
         )
         if error:
             current_app.logger.warning("서명 거부: client_id=%s 사유=%s", client.id, error)
-            abort(401, description="서명 또는 타임스탬프가 올바르지 않다.")
+            abort(401, description="서명 또는 타임스탬프가 올바르지 않습니다.")
 
         g.client = client
         return view(*args, **kwargs)

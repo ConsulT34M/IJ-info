@@ -75,9 +75,9 @@ def start(token: str):
     """IA-02. 토큰을 1회만 쓰고 서버 세션으로 바꾼 뒤 토큰 없는 주소로 보낸다."""
     expires_at, _, random_part = token.partition(".")
     if not expires_at.isdigit() or not random_part:
-        abort(410, description="인증창 주소가 올바르지 않다.")
+        abort(410, description="인증 주소가 올바르지 않습니다.")
     if int(time.time()) > int(expires_at):
-        abort(410, description="인증창 주소가 만료됐다. 거래소에서 다시 시작한다.")
+        abort(410, description="인증 주소의 유효시간이 지났습니다. 이용하시던 서비스에서 다시 시작해 주세요.")
 
     # 1회 사용 처리를 원자적 UPDATE로 한다(동시 진입 시 한 번만 성공)
     used = db.session.execute(
@@ -91,7 +91,7 @@ def start(token: str):
     )
     if used.rowcount != 1:
         db.session.rollback()
-        abort(410, description="이미 사용했거나 만료된 인증창 주소다.")
+        abort(410, description="이미 사용되었거나 유효시간이 지난 주소입니다. 이용하시던 서비스에서 다시 시작해 주세요.")
     db.session.commit()
 
     verification = db.session.scalars(
@@ -100,7 +100,7 @@ def start(token: str):
 
     if is_expired(verification.expires_at):
         terminate(verification, "P03")
-        abort(410, description="인증 제한 시간이 지났다. 거래소에서 다시 시작한다.")
+        abort(410, description="인증 제한 시간이 지났습니다. 이용하시던 서비스에서 다시 시작해 주세요.")
 
     start_session(verification)
     current_app.logger.info("인증창 진입: verification_id=%s", verification.id)
@@ -133,7 +133,7 @@ def consent_submit():
                 "verify/consent.html",
                 consent_types=CONSENT_TYPES,
                 versions=versions,
-                error="필수 동의 4종에 모두 동의해야 진행할 수 있다.",
+                error="필수 동의 4가지에 모두 동의하셔야 진행할 수 있습니다.",
                 seconds_left=int(seconds_left(verification.expires_at)),
             ),
             400,
@@ -142,7 +142,7 @@ def consent_submit():
     # 화면에 표시한 약관 버전과 서버 버전이 다르면 다시 받는다
     for name in CONSENT_TYPES:
         if request.form.get(f"{name}_version") != versions[name]:
-            abort(400, description="약관 버전이 바뀌었다. 처음부터 다시 진행한다.")
+            abort(400, description="약관이 변경되었습니다. 처음부터 다시 진행해 주세요.")
 
     agreed_at = now_utc()
     ip = client_ip()
@@ -185,14 +185,14 @@ def phone_otp():
         number = session.get(SESSION_PHONE_NUMBER)
         if not name or not number:
             return _render_phone_form(
-                verification, error="성명과 휴대폰번호를 다시 입력한다.", status=400
+                verification, error="성명과 휴대폰번호를 다시 입력해 주세요.", status=400
             )
     else:
         name = validate_name(request.form.get("name"))
         number = normalize_phone(request.form.get("phone_number"))
         if name is None or number is None:
             return _render_phone_form(
-                verification, error="성명과 휴대폰번호 형식을 확인한다.", status=400
+                verification, error="성명과 휴대폰번호 형식을 확인해 주세요.", status=400
             )
 
         try:
@@ -203,7 +203,7 @@ def phone_otp():
             )
             terminate(verification, "P05")
             end_session()
-            abort(503, description="통신사 응답이 없다. 거래소에서 다시 시작한다.")
+            abort(503, description="통신사 응답이 없습니다. 잠시 후 이용하시던 서비스에서 다시 시작해 주세요.")
 
         phone_row.match_attempts += 1
         log_phone_event(
@@ -239,9 +239,9 @@ def phone_otp():
     blocked = _issue_block_reason(otp_row, test_phone)
     if blocked is not None:
         message = (
-            f"인증번호는 건당 {current_app.config['OTP_MAX_ISSUES']}회까지 받을 수 있다."
+            f"인증번호는 건당 {current_app.config['OTP_MAX_ISSUES']}회까지 받을 수 있습니다."
             if blocked == "MAX_ISSUES"
-            else "잠시 후 다시 요청한다(60초 제한)."
+            else "잠시 후 다시 요청해 주세요. (60초 제한)"
         )
         if otp_row is None:
             return _render_phone_form(verification, error=message, status=429)
@@ -274,16 +274,16 @@ def phone_confirm():
     otp_row = db.session.get(PhoneOtp, verification.id)
 
     if otp_row is None or otp_row.code_mac is None:
-        return _render_phone_form(verification, error="인증번호를 먼저 받는다.", status=400)
+        return _render_phone_form(verification, error="인증번호를 먼저 받아 주세요.", status=400)
     if is_expired(otp_row.code_expires_at):
         return _render_otp_form(
-            verification, otp_row, error="인증번호가 만료됐다. 재발송한다.", status=400
+            verification, otp_row, error="인증번호 유효시간이 지났습니다. 재발송해 주세요.", status=400
         )
 
     code = (request.form.get("code") or "").strip()
     if not code.isdigit() or len(code) != 6:
         # 형식 오류는 불일치가 아니므로 시도 횟수에 넣지 않는다
-        return _render_otp_form(verification, otp_row, error="인증번호 6자리를 입력한다.", status=400)
+        return _render_otp_form(verification, otp_row, error="인증번호 6자리를 입력해 주세요.", status=400)
 
     # 성공 1회만: 조건부 원자적 UPDATE로 검증과 폐기를 함께 한다(D46)
     consumed = db.session.execute(
@@ -309,7 +309,7 @@ def phone_confirm():
         return _render_otp_form(
             verification,
             otp_row,
-            error=f"인증번호가 일치하지 않는다. (남은 횟수 {remaining}회)",
+            error=f"인증번호가 일치하지 않습니다. (남은 횟수 {remaining}회)",
             status=400,
         )
 
@@ -320,7 +320,7 @@ def phone_confirm():
         current_app.logger.error("대조 토큰이 없다: verification_id=%s", verification.id)
         terminate(verification, "P05")
         end_session()
-        abort(503, description="처리 중 문제가 생겼다. 거래소에서 다시 시작한다.")
+        abort(503, description="처리 중 문제가 발생했습니다. 이용하시던 서비스에서 다시 시작해 주세요.")
 
     try:
         ci = carrier.issue_ci(
@@ -330,7 +330,7 @@ def phone_confirm():
         current_app.logger.warning("MC-02 실패: verification_id=%s 사유=%s", verification.id, exc)
         terminate(verification, "P05")
         end_session()
-        abort(503, description="통신사 응답이 없다. 거래소에서 다시 시작한다.")
+        abort(503, description="통신사 응답이 없습니다. 잠시 후 이용하시던 서비스에서 다시 시작해 주세요.")
 
     phone_row.ci = ci
     phone_row.status = "PASSED"
@@ -378,7 +378,7 @@ def id_card_submit():
         current_app.logger.info(
             "신분증 얼굴 검출 실패: verification_id=%s count=%s", verification.id, face_count
         )
-        return _fail_id_card(verification, "신분증 사진에서 얼굴이 하나만 보이도록 다시 촬영한다.")
+        return _fail_id_card(verification, "신분증 사진에 얼굴이 한 명만 보이도록 다시 촬영해 주세요.")
 
     storage = get_storage()
     document = db.session.get(IdDocument, verification.id)
@@ -417,25 +417,25 @@ def id_confirm_submit():
     phone = _require_ci(verification)
     document = db.session.get(IdDocument, verification.id)
     if document is None or not document.s3_key:
-        abort(403, description="신분증 사진을 먼저 등록한다.")
+        abort(403, description="신분증 사진을 먼저 등록해 주세요.")
 
     name = session.get(SESSION_NAME)
     if not name:
-        abort(403, description="처음부터 다시 진행한다.")
+        abort(403, description="처음부터 다시 진행해 주세요.")
 
     rrn_check = validate_rrn(_submitted_rrn(request.form))
     if not rrn_check.ok:
         current_app.logger.info(
             "주민번호 검사 실패: verification_id=%s 사유=%s", verification.id, rrn_check.error
         )
-        return _fail_id_confirm(verification, "E02", "주민등록번호를 다시 확인한다.")
+        return _fail_id_confirm(verification, "E02", "주민등록번호를 다시 확인해 주세요.")
 
     issue_check = validate_issue_date(request.form.get("issue_date"), rrn_check.birth_date)
     if not issue_check.ok:
         current_app.logger.info(
             "발급일자 검사 실패: verification_id=%s 사유=%s", verification.id, issue_check.error
         )
-        return _fail_id_confirm(verification, "E02", "발급일자를 다시 확인한다.")
+        return _fail_id_confirm(verification, "E02", "발급일자를 다시 확인해 주세요.")
 
     document.rrn_enc = encrypt_str(
         secret_store.get_key("ekyc/rrn-key"),
@@ -467,7 +467,7 @@ def id_confirm_submit():
     if not mock_mois.verify(name, rrn_check.rrn, issue_check.issue_date):
         document.mois_matched = False
         current_app.logger.info("진위확인 불일치: verification_id=%s", verification.id)
-        return _fail_id_confirm(verification, "E03", "신분증 정보가 확인되지 않는다.")
+        return _fail_id_confirm(verification, "E03", "신분증 정보가 확인되지 않습니다.")
 
     document.mois_matched = True
     advance_stage(verification, "FACE")
@@ -539,11 +539,11 @@ def face_submit():
         current_app.logger.info(
             "얼굴 검출 실패: verification_id=%s count=%s", verification.id, comparison.face_count
         )
-        return _fail_face(verification, "E04", "얼굴이 하나만 보이는 사진으로 다시 올린다.")
+        return _fail_face(verification, "E04", "얼굴이 한 명만 보이는 사진으로 다시 올려 주세요.")
 
     if not comparison.matched:
         current_app.logger.info("얼굴 유사도 미달: verification_id=%s", verification.id)
-        return _fail_face(verification, "E05", "신분증 사진과 일치하지 않는다.")
+        return _fail_face(verification, "E05", "신분증 사진과 일치하지 않습니다.")
 
     current_app.logger.info("최종 판정 성공: verification_id=%s", verification.id)
     return _finish_with_result(verification, "OK")
@@ -554,16 +554,16 @@ def result_page():
     """결과 화면. 세션에는 판정 결과와 돌아갈 주소만 둔다(D64)."""
     result = session.get(SESSION_RESULT)
     if not result:
-        abort(403, description="표시할 결과가 없다.")
+        abort(403, description="표시할 결과가 없습니다.")
     return render_template("verify/result.html", **result)
 
 
 _UPLOAD_MESSAGES = {
-    "EMPTY": "신분증 사진을 선택한다.",
-    "EXTENSION": "jpg 또는 png 파일만 올릴 수 있다.",
-    "SIZE": "5MB 이하 파일만 올릴 수 있다.",
-    "MAGIC": "이미지 파일이 아니다. jpg 또는 png로 다시 올린다.",
-    None: "신분증 사진을 다시 올린다.",
+    "EMPTY": "신분증 사진을 선택해 주세요.",
+    "EXTENSION": "jpg 또는 png 파일만 올릴 수 있습니다.",
+    "SIZE": "5MB 이하 파일만 올릴 수 있습니다.",
+    "MAGIC": "이미지 파일이 아닙니다. jpg 또는 png로 다시 올려 주세요.",
+    None: "신분증 사진을 다시 올려 주세요.",
 }
 
 
@@ -571,18 +571,18 @@ def _require_id_document(verification: Verification) -> IdDocument:
     """얼굴 단계 요구사항. 최종 판정은 항상 CI 대조 통과를 요구한다(D2)."""
     document = db.session.get(IdDocument, verification.id)
     if document is None or not document.s3_key:
-        abort(403, description="신분증 사진을 먼저 등록한다.")
+        abort(403, description="신분증 사진을 먼저 등록해 주세요.")
     if not document.ci_matched:
         current_app.logger.warning(
             "CI 대조 없이 얼굴 단계 요청: verification_id=%s", verification.id
         )
-        abort(403, description="신분증 확인을 먼저 마쳐야 한다.")
+        abort(403, description="신분증 확인을 먼저 완료해 주세요.")
     # 양호 기본값: 진위확인 통과도 확인한다. VULN_W09를 켜면 이 확인만 빠진다.
     if not current_app.config.get("VULN_W09") and not document.mois_matched:
         current_app.logger.warning(
             "진위확인 없이 얼굴 단계 요청: verification_id=%s", verification.id
         )
-        abort(403, description="신분증 확인을 먼저 마쳐야 한다.")
+        abort(403, description="신분증 확인을 먼저 완료해 주세요.")
     return document
 
 
@@ -607,7 +607,7 @@ def _require_ci(verification: Verification) -> PhoneVerification:
         current_app.logger.warning(
             "CI 미수령 상태의 신분증 단계 요청: verification_id=%s", verification.id
         )
-        abort(403, description="휴대폰 본인확인을 먼저 마쳐야 한다.")
+        abort(403, description="휴대폰 본인확인을 먼저 완료해 주세요.")
     return phone
 
 
@@ -787,9 +787,9 @@ def _match_failure_response(reason: str | None, remaining: int) -> tuple[str, in
     """D1: 기본(양호)은 사유 구분 없이 같은 메시지·같은 상태 코드를 쓴다."""
     if current_app.config.get("VULN_W14"):
         if reason == carrier.REASON_NOT_SUBSCRIBER:
-            return ("등록되지 않은 휴대폰번호다.", 404)
-        return ("입력한 성명이 명의자와 다르다.", 400)
-    return (f"성명 또는 휴대폰번호가 일치하지 않는다. (남은 횟수 {remaining}회)", 200)
+            return ("등록되지 않은 휴대폰번호입니다.", 404)
+        return ("입력하신 성명이 명의자와 다릅니다.", 400)
+    return (f"성명 또는 휴대폰번호가 일치하지 않습니다. (남은 횟수 {remaining}회)", 200)
 
 
 def _render_phone_form(

@@ -230,10 +230,10 @@ def test_w14_failure_reasons_look_the_same_by_default(app, flow, carrier_backend
     assert wrong_name.status_code == 200 and unknown_number.status_code == 200
     first = wrong_name.get_data(as_text=True)
     second = unknown_number.get_data(as_text=True)
-    assert "성명 또는 휴대폰번호가 일치하지 않는다" in first
-    assert "성명 또는 휴대폰번호가 일치하지 않는다" in second
+    assert "성명 또는 휴대폰번호가 일치하지 않습니다" in first
+    assert "성명 또는 휴대폰번호가 일치하지 않습니다" in second
     assert "등록되지 않은" not in second
-    assert "명의자와 다르다" not in first
+    assert "명의자와 다릅니다" not in first
 
 
 def test_w14_failure_reasons_are_exposed_when_enabled(enable_vuln, flow, carrier_backend, person):
@@ -242,11 +242,11 @@ def test_w14_failure_reasons_are_exposed_when_enabled(enable_vuln, flow, carrier
 
     wrong_name = _match_failure(flow, "다른이름", person["phone_number"])
     assert wrong_name.status_code == 400
-    assert "입력한 성명이 명의자와 다르다" in wrong_name.get_data(as_text=True)
+    assert "입력하신 성명이 명의자와 다릅니다" in wrong_name.get_data(as_text=True)
 
     unknown_number = _match_failure(flow, person["name"], UNKNOWN_PHONE)
     assert unknown_number.status_code == 404
-    assert "등록되지 않은 휴대폰번호다" in unknown_number.get_data(as_text=True)
+    assert "등록되지 않은 휴대폰번호입니다" in unknown_number.get_data(as_text=True)
 
     # 응답 코드만으로 그 번호가 가입된 번호인지 알 수 있다(열거 오라클)
     assert wrong_name.status_code != unknown_number.status_code

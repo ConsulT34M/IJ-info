@@ -69,7 +69,7 @@ def _enforce_admin_ip():
             "허용되지 않은 IP의 관리자 요청: login_id=%s ip=%s", current_user.login_id, client_ip()
         )
         clear_login_state()
-        abort(403, description="허용되지 않은 접속 위치다.")
+        abort(403, description="허용되지 않은 접속 위치입니다.")
 
 
 # --- 로그인 ---------------------------------------------------------------
@@ -211,7 +211,7 @@ def verification_detail(verification_id):
     """상세: 휴대폰 / 신분증 / 얼굴 탭."""
     verification = db.session.get(Verification, verification_id)
     if verification is None:
-        abort(404, description="해당 건이 없다.")
+        abort(404, description="해당 건을 찾을 수 없습니다.")
 
     log_access(
         "admin",
@@ -260,7 +260,7 @@ def image_request(verification_id):
     kind = request.form.get("kind") or ""
     reason = (request.form.get("reason") or "").strip()
     if kind not in IMAGE_KINDS:
-        abort(400, description="열람 대상이 올바르지 않다.")
+        abort(400, description="열람 대상이 올바르지 않습니다.")
     if len(reason) < 5:
         return redirect(url_for("admin.verification_detail", verification_id=verification_id, error="reason"))
 
@@ -306,22 +306,22 @@ def image_raw(verification_id, kind: str):
         or grant.get("kind") != kind
         or kind not in IMAGE_KINDS
     ):
-        abort(403, description="열람 사유를 먼저 입력한다.")
+        abort(403, description="열람 사유를 먼저 입력해 주세요.")
     if now_utc().isoformat() > grant.get("until", ""):
         session.pop(SESSION_IMAGE_GRANT, None)
-        abort(410, description="열람 유효시간이 지났다. 사유를 다시 입력한다.")
+        abort(410, description="열람 유효시간이 지났습니다. 사유를 다시 입력해 주세요.")
 
     verification = db.session.get(Verification, verification_id)
     if verification is None:
         abort(404)
     key = _image_key(verification, kind)
     if key is None:
-        abort(404, description="이미지가 파기됐다.")
+        abort(404, description="이미지가 파기되었습니다.")
 
     try:
         data = get_storage().load(key)
     except StorageError:
-        abort(404, description="이미지가 파기됐다.")
+        abort(404, description="이미지가 파기되었습니다.")
 
     media_type = "image/png" if key.endswith(".png") else "image/jpeg"
     return Response(data, mimetype=media_type, headers={"Cache-Control": "no-store"})
@@ -372,9 +372,9 @@ def change_role(admin_id):
         abort(404)
     new_role = request.form.get("role") or ""
     if new_role not in ("admin", "auditor"):
-        abort(400, description="역할 값이 올바르지 않다.")
+        abort(400, description="역할 값이 올바르지 않습니다.")
     if target.id == current_user.id and new_role != "admin":
-        abort(400, description="자신의 권한은 낮출 수 없다.")
+        abort(400, description="본인의 권한은 낮출 수 없습니다.")
 
     previous = target.role
     target.role = new_role
@@ -395,9 +395,9 @@ def change_role(admin_id):
 
 # --- 표시용 변환 ------------------------------------------------------------
 
-_LOGIN_FAILED = "아이디 또는 비밀번호가 올바르지 않다."
-_OTP_FAILED = "인증 앱의 6자리 코드가 올바르지 않다."
-_LOCKED = "로그인 실패가 반복돼 계정이 잠겼다. 30분 후 다시 시도한다."
+_LOGIN_FAILED = "아이디 또는 비밀번호가 올바르지 않습니다."
+_OTP_FAILED = "인증 앱의 6자리 코드가 올바르지 않습니다."
+_LOCKED = "로그인 실패가 반복되어 계정이 잠겼습니다. 30분 후 다시 시도해 주세요."
 
 
 def _image_key(verification: Verification, kind: str) -> str | None:

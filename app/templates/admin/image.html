@@ -5,10 +5,10 @@
   <div class="card-body">
     <h2 class="h5 card-title">{{ '신분증' if kind == 'id_card' else '얼굴' }} 이미지</h2>
     {% if purged %}
-    <div class="alert alert-secondary mb-0" role="alert">파기됨 — 이미 파기된 이미지라 열람할 수 없다.</div>
+    <div class="alert alert-secondary mb-0" role="alert">파기됨 — 이미 파기된 이미지라 열람하실 수 없습니다.</div>
     {% else %}
     <p class="card-text text-secondary small">
-      사유: {{ reason }} · 이 화면은 {{ valid_seconds }}초 동안만 이미지를 불러올 수 있다.
+      사유: {{ reason }} · 이 화면은 {{ valid_seconds }}초 동안만 이미지를 불러올 수 있습니다.
     </p>
     <img class="img-fluid border rounded"
          src="{{ url_for('admin.image_raw', verification_id=verification.id, kind=kind) }}"

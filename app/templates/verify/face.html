@@ -9,9 +9,9 @@
   <div class="card-body">
     <h2 class="h5 card-title">얼굴 사진 등록</h2>
     <p class="card-text text-secondary small">
-      신분증 사진과 대조한다. 남은 시간 약 {{ seconds_left // 60 }}분.
+      신분증 사진과 대조합니다. 남은 시간 약 {{ seconds_left // 60 }}분입니다.
     </p>
-    <p class="card-text text-secondary small">jpg 또는 png, {{ max_mb }}MB 이하. 얼굴이 하나만 보이게 촬영한다.</p>
+    <p class="card-text text-secondary small">jpg 또는 png 형식, {{ max_mb }}MB 이하로 올려 주세요. 얼굴이 한 명만 보이도록 촬영해 주세요.</p>
 
     <form method="post" action="{{ url_for('verify.face_submit') }}" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

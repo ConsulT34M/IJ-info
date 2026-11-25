@@ -9,10 +9,10 @@
   <div class="card-body">
     <h2 class="h5 card-title">인증번호 입력</h2>
     <p class="card-text text-secondary small mb-1">
-      {{ phone_mask }} 로 6자리 인증번호를 보냈다. 유효 시각 {{ code_expires_at }}.
+      {{ phone_mask }} 번호로 6자리 인증번호를 보내 드렸습니다. 유효 시각은 {{ code_expires_at }} 입니다.
     </p>
     <p class="card-text text-secondary small">
-      실습 환경이라 문자가 오지 않는다. <a href="{{ url_for('test_inbox.inbox_page') }}" target="_blank" rel="noreferrer">테스트 수신함</a>에서 확인한다.
+      실습 환경이라 실제 문자가 발송되지 않습니다. <a href="{{ url_for('test_inbox.inbox_page') }}" target="_blank" rel="noreferrer">테스트 수신함</a>에서 확인해 주세요.
       (발송 {{ issue_no }}/{{ max_issues }}회, 재발송 가능 {{ resend_at }})
     </p>
 

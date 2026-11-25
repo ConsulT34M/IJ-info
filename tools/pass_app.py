@@ -81,8 +81,8 @@ def show_message(payload: dict) -> None:
                 "",
                 f"        {spaced}",
                 "",
-                "3분 안에 입력한다.",
-                "타인에게 알려주지 않는다.",
+                "3분 안에 입력해 주세요.",
+                "타인에게 알려주지 마세요.",
                 "",
                 f"유효 {payload.get('code_expires_at', '-')}",
                 f"{payload.get('issue_no', '-')}번째 발송",
@@ -119,14 +119,14 @@ def open_session() -> tuple[requests.Session, str]:
     try:
         response = session.get(f"{BASE_URL}/test-inbox/", timeout=TIMEOUT)
     except requests.RequestException as exc:
-        raise SystemExit(f"A사 앱에 연결할 수 없다: {BASE_URL} ({exc.__class__.__name__})")
+        raise SystemExit(f"A사 앱에 연결할 수 없습니다: {BASE_URL} ({exc.__class__.__name__})")
     if response.status_code == 403:
-        raise SystemExit("수신함 접근이 거부됐다. TEST_INBOX_ALLOWED_IPS를 확인한다.")
+        raise SystemExit("수신함 접근이 거부되었습니다. TEST_INBOX_ALLOWED_IPS를 확인해 주세요.")
     if response.status_code != 200:
-        raise SystemExit(f"수신함 화면을 열 수 없다: HTTP {response.status_code}")
+        raise SystemExit(f"수신함 화면을 열 수 없습니다: HTTP {response.status_code}")
     found = CSRF_RE.search(response.text)
     if not found:
-        raise SystemExit("CSRF 토큰을 찾지 못했다. A사 앱 버전을 확인한다.")
+        raise SystemExit("CSRF 토큰을 찾지 못했습니다. A사 앱 버전을 확인해 주세요.")
     return session, found.group(1)
 
 
@@ -141,7 +141,7 @@ def post(path: str, data: dict) -> tuple[int, dict]:
     try:
         return response.status_code, response.json()
     except ValueError:
-        return response.status_code, {"error": f"예상하지 못한 응답이다 (HTTP {response.status_code})"}
+        return response.status_code, {"error": f"예상하지 못한 응답입니다 (HTTP {response.status_code})"}
 
 
 # ----------------------------------------------------------------- 명령
@@ -153,14 +153,14 @@ def cmd_register(args) -> int:
     birth = args.birth or input("생년월일 (1990-01-01): ").strip()
 
     print()
-    print("통신사에 명의를 확인하는 중...")
+    print("통신사에 명의를 확인하는 중입니다...")
     status, body = post(
         "/test-inbox/devices", {"phone_number": phone, "name": name, "birth_date": birth}
     )
     if status != 200:
-        print(f"  기기 등록 실패: {body.get('error', status)}")
+        print(f"  기기 등록에 실패했습니다: {body.get('error', status)}")
         if status == 403:
-            print("  (번호·성명·생년월일이 통신사 명부와 모두 맞아야 한다)")
+            print("  (번호·성명·생년월일이 통신사 명부와 모두 일치해야 합니다)")
         return 1
 
     save_device(
@@ -171,16 +171,16 @@ def cmd_register(args) -> int:
             "registered_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
     )
-    print(f"  명의 확인됨. 기기를 등록했다. ({body['phone_mask']})")
-    print(f"  수신함 키는 {DEVICE_FILE} 에 저장했다 (권한 600).")
-    print("  같은 번호로 다시 등록하면 이전 기기는 쓸 수 없다.")
+    print(f"  명의가 확인되었습니다. 기기를 등록했습니다. ({body['phone_mask']})")
+    print(f"  수신함 키는 {DEVICE_FILE} 에 저장했습니다 (권한 600).")
+    print("  같은 번호로 다시 등록하시면 이전 기기는 사용하실 수 없습니다.")
     return 0
 
 
 def _require_device() -> dict:
     device = load_device()
     if device is None:
-        raise SystemExit("등록된 기기가 없다. 먼저 'pass_app.py register'를 실행한다.")
+        raise SystemExit("등록된 기기가 없습니다. 먼저 'pass_app.py register'를 실행해 주세요.")
     return device
 
 
@@ -195,7 +195,7 @@ def cmd_inbox(args) -> int:
         show_message(body)
         return 0
     if status == 404 and "수신함" in body.get("error", ""):
-        print("기기 등록이 만료됐다. 다시 등록한다. (같은 번호로 다른 기기를 등록했을 수 있다)")
+        print("기기 등록이 만료되었습니다. 다시 등록해 주세요. (같은 번호로 다른 기기를 등록했을 수 있습니다)")
         return 1
     print(f"{device['phone_mask']}: {body.get('error', status)}")
     return 1
@@ -207,7 +207,7 @@ def cmd_watch(args) -> int:
         box(
             [
                 f"PASS 모의 앱   {device['phone_mask']}",
-                "새 문자를 기다린다. (Ctrl+C로 종료)",
+                "새 문자를 기다리는 중입니다. (Ctrl+C로 종료)",
             ]
         )
     )
@@ -221,18 +221,18 @@ def cmd_watch(args) -> int:
                     seen = mark
                     show_message(body)
             elif status == 404 and "수신함" in body.get("error", ""):
-                print("기기 등록이 만료됐다. 다시 등록한다.")
+                print("기기 등록이 만료되었습니다. 다시 등록해 주세요.")
                 return 1
             time.sleep(POLL_SECONDS)
     except KeyboardInterrupt:
-        print("\n종료한다.")
+        print("\n종료합니다.")
         return 0
 
 
 def cmd_status(args) -> int:
     device = load_device()
     if device is None:
-        print("등록된 기기가 없다.")
+        print("등록된 기기가 없습니다.")
         return 1
     print(
         box(
@@ -244,24 +244,24 @@ def cmd_status(args) -> int:
             ]
         )
     )
-    print(f"수신함 키는 화면에 찍지 않는다. {DEVICE_FILE} 에 있다.")
+    print(f"수신함 키는 화면에 표시하지 않습니다. {DEVICE_FILE} 에 있습니다.")
     return 0
 
 
 def cmd_logout(args) -> int:
     if DEVICE_FILE.exists():
         DEVICE_FILE.unlink()
-        print("기기 등록을 해제했다. 저장된 수신함 키를 지웠다.")
-        print("(A사 쪽 수신함 키는 남아 있다. 다시 등록하면 새 키로 바뀐다.)")
+        print("기기 등록을 해제했습니다. 저장된 수신함 키를 삭제했습니다.")
+        print("(A사 쪽 수신함 키는 남아 있습니다. 다시 등록하시면 새 키로 바뀝니다.)")
         return 0
-    print("등록된 기기가 없다.")
+    print("등록된 기기가 없습니다.")
     return 1
 
 
 def cmd_default(args) -> int:
     """인자가 없으면: 등록돼 있으면 수신 대기, 아니면 등록부터."""
     if load_device() is None:
-        print(box(["PASS 모의 앱", "등록된 기기가 없다. 명의 인증을 먼저 한다."]))
+        print(box(["PASS 모의 앱", "등록된 기기가 없습니다. 명의 인증을 먼저 진행합니다."]))
         print()
         if cmd_register(args) != 0:
             return 1

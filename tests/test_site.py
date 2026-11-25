@@ -108,7 +108,7 @@ def test_notice_search_filters_the_list(client):
 
 def test_notice_search_with_no_result(client):
     html = client.get("/notices?q=존재하지않는검색어").get_data(as_text=True)
-    assert "검색 결과가 없다" in html
+    assert "검색 결과가 없습니다" in html
 
 
 def test_notice_search_keyword_is_escaped(client):
@@ -129,7 +129,7 @@ def test_notice_detail(client):
 def test_unknown_notice_is_404(client):
     response = client.get("/notices/999999")
     assert response.status_code == 404
-    assert "페이지를 찾을 수 없다" in response.get_data(as_text=True)
+    assert "페이지를 찾을 수 없습니다" in response.get_data(as_text=True)
 
 
 def test_unknown_path_shows_the_site_404(client):
@@ -137,7 +137,7 @@ def test_unknown_path_shows_the_site_404(client):
     response = client.get("/존재하지-않는-경로")
     assert response.status_code == 404
     html = response.get_data(as_text=True)
-    assert "페이지를 찾을 수 없다" in html
+    assert "페이지를 찾을 수 없습니다" in html
     assert "Traceback" not in html
     assert "Werkzeug" not in html
 
@@ -176,7 +176,7 @@ def test_inquiry_succeeds_and_returns_a_receipt_number(client):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert re.search(r"IJ-\d{8}-[0-9A-F]{6}", html)
-    assert "저장하지 않는다" in html
+    assert "저장하지 않습니다" in html
     # 문의 내용을 화면에 되돌려주지 않는다
     assert "contact@example.invalid" not in html
 
@@ -184,11 +184,11 @@ def test_inquiry_succeeds_and_returns_a_receipt_number(client):
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     [
-        ("kind", "아무거나", "문의 유형을 선택한다."),
-        ("company", "", "회사명을 입력한다."),
-        ("manager", "", "담당자명을 입력한다."),
-        ("email", "골뱅이없음", "이메일 형식을 확인한다."),
-        ("message", "짧다", "문의 내용을 10자 이상 입력한다."),
+        ("kind", "아무거나", "문의 유형을 선택해 주세요."),
+        ("company", "", "회사명을(를) 입력해 주세요."),
+        ("manager", "", "담당자명을(를) 입력해 주세요."),
+        ("email", "골뱅이없음", "이메일 형식을 확인해 주세요."),
+        ("message", "짧다", "문의 내용을 10자 이상 입력해 주세요."),
     ],
 )
 def test_inquiry_validation(client, field, value, expected):

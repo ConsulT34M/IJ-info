@@ -9,7 +9,7 @@
   <div class="card-body">
     <h2 class="h5 card-title">신분증 정보 입력</h2>
     <p class="card-text text-secondary small">
-      성명은 휴대폰 본인확인으로 확인된 값이라 바꿀 수 없다. 남은 시간 약 {{ seconds_left // 60 }}분.
+      성명은 휴대폰 본인확인으로 확인된 값이라 변경할 수 없습니다. 남은 시간 약 {{ seconds_left // 60 }}분입니다.
     </p>
 
     <form method="post" action="{{ url_for('verify.id_confirm_submit') }}">
@@ -27,7 +27,7 @@
           <input class="form-control" type="password" id="rrn_back" name="rrn_back" maxlength="7"
                  inputmode="numeric" autocomplete="off" placeholder="뒤 7자리" pattern="[0-9]{7}" required>
         </div>
-        <div class="form-text">뒤 7자리는 화면에 표시되지 않는다.</div>
+        <div class="form-text">뒤 7자리는 화면에 표시되지 않습니다.</div>
       </div>
       <div class="mb-3">
         <label class="form-label" for="issue_date">발급일자</label>

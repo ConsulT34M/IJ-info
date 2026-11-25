@@ -9,7 +9,7 @@
   <div class="card-body">
     <h2 class="h5 card-title">필수 동의</h2>
     <p class="card-text text-secondary small">
-      아래 4가지에 모두 동의해야 본인확인을 진행할 수 있다. 남은 시간 약 {{ seconds_left // 60 }}분.
+      아래 4가지에 모두 동의하셔야 본인확인을 진행할 수 있습니다. 남은 시간 약 {{ seconds_left // 60 }}분입니다.
     </p>
 
     <form method="post" action="{{ url_for('verify.consent_submit') }}">
@@ -20,7 +20,7 @@
         <input type="hidden" name="collect_version" value="{{ versions['collect'] }}">
         <label class="form-check-label" for="collect">
           <strong>개인정보 수집·이용 동의</strong> ({{ versions['collect'] }})<br>
-          <span class="text-secondary small">성명, 휴대폰번호, 주민등록번호, 신분증·얼굴 이미지를 본인확인 목적으로 수집·이용한다.</span>
+          <span class="text-secondary small">성명, 휴대폰번호, 주민등록번호, 신분증·얼굴 이미지를 본인확인 목적으로 수집·이용합니다.</span>
         </label>
       </div>
 
@@ -29,7 +29,7 @@
         <input type="hidden" name="uid_version" value="{{ versions['uid'] }}">
         <label class="form-check-label" for="uid">
           <strong>고유식별정보 처리 동의</strong> ({{ versions['uid'] }})<br>
-          <span class="text-secondary small">주민등록번호를 본인확인에 한해 처리한다.</span>
+          <span class="text-secondary small">주민등록번호를 본인확인에 한해 처리합니다.</span>
         </label>
       </div>
 
@@ -38,7 +38,7 @@
         <input type="hidden" name="carrier_terms_version" value="{{ versions['carrier_terms'] }}">
         <label class="form-check-label" for="carrier_terms">
           <strong>통신사 본인확인 서비스 이용약관 동의</strong> ({{ versions['carrier_terms'] }})<br>
-          <span class="text-secondary small">휴대폰 명의 대조와 연계정보(CI) 발급을 위해 통신사에 정보를 제공한다.</span>
+          <span class="text-secondary small">휴대폰 명의 대조와 연계정보(CI) 발급을 위해 통신사에 정보를 제공합니다.</span>
         </label>
       </div>
 
@@ -47,7 +47,7 @@
         <input type="hidden" name="biometric_version" value="{{ versions['biometric'] }}">
         <label class="form-check-label" for="biometric">
           <strong>생체정보(얼굴) 처리 동의</strong> ({{ versions['biometric'] }})<br>
-          <span class="text-secondary small">신분증 사진과 얼굴 사진을 대조하고, 판정 직후 이미지를 파기한다.</span>
+          <span class="text-secondary small">신분증 사진과 얼굴 사진을 대조하고, 판정 직후 이미지를 파기합니다.</span>
         </label>
       </div>
 

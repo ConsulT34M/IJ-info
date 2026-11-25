@@ -99,7 +99,7 @@ def test_registering_again_cuts_off_the_previous_device(client, csrf, person, ca
     # 새 키는 수신함을 찾는다(아직 온 문자가 없으니 '인증번호 없음'이다)
     again = read_inbox(client, csrf, second)
     assert again.status_code == 404
-    assert "인증번호가 없다" in again.get_json()["error"]
+    assert "인증번호가 없습니다" in again.get_json()["error"]
 
 
 def test_the_key_from_people_json_still_works(client, person, carrier_backend, flow):
@@ -124,7 +124,7 @@ def test_registration_needs_the_real_owner(client, csrf, person, carrier_backend
     response = register(client, csrf, person, **{field: value})
     assert response.status_code == 403
     # W-14와 같은 기준: 어느 항목이 틀렸는지 알려주지 않는다
-    assert response.get_json()["error"] == "등록할 수 없다. 번호와 명의를 확인한다."
+    assert response.get_json()["error"] == "등록할 수 없습니다. 번호와 명의를 확인해 주세요."
 
 
 def test_unknown_phone_is_refused_without_calling_the_carrier(
@@ -197,7 +197,7 @@ def test_inbox_returns_html_to_a_browser(client, person, carrier_backend, flow):
 def test_inbox_errors_are_json_for_the_app(client, csrf):
     response = client.post(LATEST, data={"csrf_token": csrf, "inbox_key": "없는키"}, headers=JSON)
     assert response.status_code == 404
-    assert response.get_json()["error"] == "수신함을 찾을 수 없다."
+    assert response.get_json()["error"] == "수신함을 찾을 수 없습니다."
 
 
 def test_inbox_never_returns_the_phone_number(client, person, carrier_backend, flow):

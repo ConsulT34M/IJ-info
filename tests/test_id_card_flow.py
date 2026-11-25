@@ -109,7 +109,7 @@ def test_rrn_back_digits_are_masked_on_screen(flow, carrier_backend, person, cli
     body = client.get("/verify/id-confirm").get_data(as_text=True)
     assert 'name="rrn_front"' in body and 'maxlength="6"' in body
     assert 'type="password"' in body and 'name="rrn_back"' in body
-    assert "뒤 7자리는 화면에 표시되지 않는다" in body
+    assert "뒤 7자리는 화면에 표시되지 않습니다" in body
 
 
 def test_single_rrn_field_still_works(flow, carrier_backend, person):

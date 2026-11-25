@@ -48,7 +48,7 @@ def test_success_path_finishes_with_ok(flow, carrier_backend, sent_webhooks, per
     page = client.get("/verify/result")
     assert page.status_code == 200
     body = page.get_data(as_text=True)
-    assert "본인확인이 완료됐다" in body and RETURN_URL in body
+    assert "본인확인이 완료되었습니다" in body and RETURN_URL in body
     assert person["name"] not in body and person["rrn"] not in body
 
 

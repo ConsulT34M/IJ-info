@@ -43,7 +43,7 @@
                href="{{ url_for('admin.verification_detail', verification_id=item.verification_id) }}">상세</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="11" class="text-center text-secondary py-4">이력이 없다.</td></tr>
+      <tr><td colspan="11" class="text-center text-secondary py-4">이력이 없습니다.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -61,6 +61,6 @@
   </ul>
 </nav>
 <p class="text-secondary small mt-3 mb-0">
-  성명·휴대폰번호·주민번호는 마스킹된 값이고, CI는 화면에 표시하지 않는다.
+  성명·휴대폰번호·주민번호는 마스킹된 값이며, CI는 화면에 표시하지 않습니다.
 </p>
 {% endblock %}

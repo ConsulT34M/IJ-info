@@ -2,7 +2,7 @@
 {% block title %}인증 상세{% endblock %}
 {% block content %}
 {% if request.args.get('error') == 'reason' %}
-<div class="alert alert-danger" role="alert">열람 사유를 5자 이상 입력한다.</div>
+<div class="alert alert-danger" role="alert">열람 사유를 5자 이상 입력해 주세요.</div>
 {% endif %}
 
 <div class="d-flex justify-content-between align-items-start mb-3">
@@ -64,7 +64,7 @@
           <td class="small">{{ event.phone_mask or '-' }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-secondary py-3">이력이 없다.</td></tr>
+        <tr><td colspan="5" class="text-center text-secondary py-3">이력이 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -98,10 +98,10 @@
     </form>
     <p class="text-secondary small mt-2 mb-0">열람하면 사유와 함께 접속기록에 남는다.</p>
     {% else %}
-    <p class="text-secondary small mb-0">auditor 역할은 이미지를 열람할 수 없다.</p>
+    <p class="text-secondary small mb-0">auditor 역할은 이미지를 열람하실 수 없습니다.</p>
     {% endif %}
     {% else %}
-    <p class="text-secondary small mb-0">신분증 단계 기록이 없다.</p>
+    <p class="text-secondary small mb-0">신분증 단계 기록이 없습니다.</p>
     {% endif %}
   </section>
 
@@ -118,7 +118,7 @@
           <td class="small">{% if check.s3_key %}보관 중{% else %}파기됨{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-secondary py-3">얼굴 대조 기록이 없다.</td></tr>
+        <tr><td colspan="5" class="text-center text-secondary py-3">얼굴 대조 기록이 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -137,7 +137,7 @@
           <td class="small font-monospace">{{ row.payload_hash[:16] }}…</td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="text-center text-secondary py-3">전송 기록이 없다.</td></tr>
+        <tr><td colspan="5" class="text-center text-secondary py-3">전송 기록이 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>

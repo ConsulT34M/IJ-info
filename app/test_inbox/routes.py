@@ -57,13 +57,13 @@ def latest():
     """수신함 키로 가장 최근의 유효한 인증번호를 꺼낸다."""
     inbox_key = (request.form.get("inbox_key") or "").strip()
     if not inbox_key:
-        return _inbox_error("수신함 키를 입력한다.", 400)
+        return _inbox_error("수신함 키를 입력해 주세요.", 400)
 
     phone = db.session.scalars(
         db.select(TestPhone).filter_by(inbox_key_hash=sha256_hex(inbox_key))
     ).one_or_none()
     if phone is None:
-        return _inbox_error("수신함을 찾을 수 없다.", 404)
+        return _inbox_error("수신함을 찾을 수 없습니다.", 404)
 
     otp = db.session.scalars(
         db.select(PhoneOtp)
@@ -76,7 +76,7 @@ def latest():
     ).first()
     if otp is None:
         return _inbox_error(
-            "유효한 인증번호가 없다. 인증창에서 먼저 발송한다.", 404, phone.phone_mask
+            "유효한 인증번호가 없습니다. 인증 화면에서 먼저 발송해 주세요.", 404, phone.phone_mask
         )
 
     code = decrypt_from_inbox(otp.verification_id, otp.inbox_ciphertext)
@@ -112,27 +112,27 @@ def register_device():
     birth_date = (request.form.get("birth_date") or "").strip()
 
     if phone is None:
-        return jsonify(error="휴대폰번호 형식이 올바르지 않다."), 400
+        return jsonify(error="휴대폰번호 형식이 올바르지 않습니다."), 400
     if name is None:
-        return jsonify(error="성명을 입력한다."), 400
+        return jsonify(error="성명을 입력해 주세요."), 400
     if not _looks_like_a_date(birth_date):
-        return jsonify(error="생년월일은 YYYY-MM-DD 형식이다."), 400
+        return jsonify(error="생년월일은 YYYY-MM-DD 형식으로 입력해 주세요."), 400
 
     row = db.session.get(TestPhone, phone_key(phone))
     if row is None:
         # 수신함이 없는 번호다. 통신사를 부르기 전에 끊어 호출을 아낀다.
-        return jsonify(error="등록할 수 없다. 번호와 명의를 확인한다."), 400
+        return jsonify(error="등록할 수 없습니다. 번호와 명의를 확인해 주세요."), 400
 
     try:
         result = carrier.register_device(name, phone, birth_date)
     except carrier.CarrierError as exc:
         current_app.logger.warning("MC-03 실패: %s", exc)
-        return jsonify(error="통신사 응답이 없다. 통신사 앱이 떠 있는지 확인한다."), 503
+        return jsonify(error="통신사 응답이 없습니다. 통신사 앱이 실행 중인지 확인해 주세요."), 503
 
     if not result.matched:
         # W-14와 같은 기준: 어느 항목이 틀렸는지 알려주지 않는다
         current_app.logger.info("기기 등록 거부: reason=%s", result.reason)
-        return jsonify(error="등록할 수 없다. 번호와 명의를 확인한다."), 403
+        return jsonify(error="등록할 수 없습니다. 번호와 명의를 확인해 주세요."), 403
 
     inbox_key = token_urlsafe(24)
     row.inbox_key_hash = sha256_hex(inbox_key)

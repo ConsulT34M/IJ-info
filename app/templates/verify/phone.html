@@ -9,7 +9,7 @@
   <div class="card-body">
     <h2 class="h5 card-title">휴대폰 본인확인</h2>
     <p class="card-text text-secondary small">
-      통신사에 등록된 명의와 대조한다. 남은 시간 약 {{ seconds_left // 60 }}분.
+      통신사에 등록된 명의와 대조합니다. 남은 시간 약 {{ seconds_left // 60 }}분입니다.
     </p>
 
     <form method="post" action="{{ url_for('verify.phone_otp') }}">

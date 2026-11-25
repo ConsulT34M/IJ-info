@@ -105,7 +105,7 @@ def role_required(*roles: str):
                 current_app.logger.warning(
                     "권한 없는 접근: login_id=%s role=%s", current_user.login_id, current_user.role
                 )
-                abort(403, description="이 작업을 할 권한이 없다.")
+                abort(403, description="이 작업을 수행할 권한이 없습니다.")
             return view(*args, **kwargs)
 
         return wrapper

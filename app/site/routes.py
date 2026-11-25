@@ -153,16 +153,16 @@ def _page_number(raw: str | None, pages: int) -> int:
 def _validate_inquiry(form: dict) -> str | None:
     """문의 폼 검사. 통과하면 None."""
     if form["kind"] not in INQUIRY_KINDS:
-        return "문의 유형을 선택한다."
+        return "문의 유형을 선택해 주세요."
     for field, label in (("company", "회사명"), ("manager", "담당자명"), ("email", "이메일")):
         if not form[field]:
-            return f"{label}을 입력한다."
+            return f"{label}을(를) 입력해 주세요."
         if len(form[field]) > LIMITS[field]:
-            return f"{label}이 너무 길다. {LIMITS[field]}자 이내로 입력한다."
+            return f"{label}이(가) 너무 깁니다. {LIMITS[field]}자 이내로 입력해 주세요."
     if not EMAIL_RE.match(form["email"]):
-        return "이메일 형식을 확인한다."
+        return "이메일 형식을 확인해 주세요."
     if len(form["message"]) < 10:
-        return "문의 내용을 10자 이상 입력한다."
+        return "문의 내용을 10자 이상 입력해 주세요."
     if len(form["message"]) > LIMITS["message"]:
-        return f"문의 내용이 너무 길다. {LIMITS['message']}자 이내로 입력한다."
+        return f"문의 내용이 너무 깁니다. {LIMITS['message']}자 이내로 입력해 주세요."
     return None

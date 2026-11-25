@@ -7,7 +7,7 @@
     <div class="card">
       <div class="card-body">
         <h2 class="h5 card-title">인증 앱 코드</h2>
-        <p class="card-text text-secondary small">{{ login_id }} 계정의 6자리 코드를 입력한다.</p>
+        <p class="card-text text-secondary small">{{ login_id }} 계정의 6자리 코드를 입력해 주세요.</p>
         <form method="post" action="{{ url_for('admin.otp') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="mb-3">

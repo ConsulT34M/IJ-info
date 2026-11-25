@@ -39,13 +39,13 @@ def require_carrier_client(view):
     def wrapper(*args, **kwargs):
         presented = request.headers.get("X-Carrier-Client-Key", "")
         if not presented:
-            abort(401, description="클라이언트 키가 없다.")
+            abort(401, description="클라이언트 키가 없습니다.")
         row = db.session.scalars(
             db.select(CarrierClient).filter_by(key_digest=sha256_hex(presented))
         ).one_or_none()
         if row is None or row.status != "ACTIVE":
             current_app.logger.warning("통신사 API 키 거부: ip=%s", request.remote_addr)
-            abort(401, description="클라이언트 키가 올바르지 않다.")
+            abort(401, description="클라이언트 키가 올바르지 않습니다.")
         g.carrier_client = row
         return view(*args, **kwargs)
 
@@ -55,7 +55,7 @@ def require_carrier_client(view):
 def _json_body() -> dict:
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        abort(400, description="JSON 본문이 필요하다.")
+        abort(400, description="JSON 본문이 필요합니다.")
     return payload
 
 
@@ -69,11 +69,11 @@ def identity_matches():
     phone = normalize_phone(payload.get("phone_number"))
 
     if not isinstance(verification_id, str) or not verification_id.strip():
-        abort(400, description="verification_id가 필요하다.")
+        abort(400, description="verification_id가 필요합니다.")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 50:
-        abort(400, description="name이 필요하다.")
+        abort(400, description="name이 필요합니다.")
     if phone is None:
-        abort(400, description="phone_number 형식이 올바르지 않다.")
+        abort(400, description="phone_number 형식이 올바르지 않습니다.")
 
     subscriber_key = secret_store.get_key("carrier/subscriber-key")
     subscriber = db.session.scalars(
@@ -125,7 +125,7 @@ def ci_issuances():
     match_token = payload.get("match_token")
 
     if not isinstance(verification_id, str) or not isinstance(match_token, str) or not match_token:
-        abort(400, description="verification_id와 match_token이 필요하다.")
+        abort(400, description="verification_id와 match_token이 필요합니다.")
 
     digest = sha256_hex(match_token)
     session_row = db.session.get(MatchSession, digest)
@@ -136,7 +136,7 @@ def ci_issuances():
         or is_expired(session_row.expires_at)
     ):
         current_app.logger.warning("MC-02 토큰 거부: verification_id=%s", verification_id)
-        abort(409, description="대조 토큰을 쓸 수 없다.")
+        abort(409, description="대조 토큰을 사용할 수 없습니다.")
 
     # 1회용 보장: 조건부 원자적 UPDATE가 1행을 바꿔야 통과
     used = db.session.execute(
@@ -146,7 +146,7 @@ def ci_issuances():
     )
     if used.rowcount != 1:
         db.session.rollback()
-        abort(409, description="대조 토큰을 쓸 수 없다.")
+        abort(409, description="대조 토큰을 사용할 수 없습니다.")
     db.session.commit()
 
     subscriber = db.session.get(Subscriber, session_row.subscriber_ref)
@@ -173,11 +173,11 @@ def device_registrations():
     birth_date = payload.get("birth_date")
 
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 50:
-        abort(400, description="name이 필요하다.")
+        abort(400, description="name이 필요합니다.")
     if phone is None:
-        abort(400, description="phone_number 형식이 올바르지 않다.")
+        abort(400, description="phone_number 형식이 올바르지 않습니다.")
     if not isinstance(birth_date, str) or len(birth_date.strip()) != 10:
-        abort(400, description="birth_date는 YYYY-MM-DD 형식이다.")
+        abort(400, description="birth_date는 YYYY-MM-DD 형식이어야 합니다.")
 
     subscriber_key = secret_store.get_key("carrier/subscriber-key")
     subscriber = db.session.scalars(
