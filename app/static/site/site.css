@@ -302,6 +302,10 @@ img, svg { max-width: 100%; }
   border-bottom: 1px solid var(--ij-line);
   vertical-align: top;
 }
+.table-plain td .btn { white-space: nowrap; }
+.table-plain thead th { width: auto; background: var(--ij-bg-soft); font-weight: 700; color: var(--ij-ink); }
+.table-plain thead th:last-child, .table-plain td:last-child { white-space: nowrap; width: 1%; }
+
 .table-plain th {
   width: 30%;
   color: var(--ij-ink-soft);
