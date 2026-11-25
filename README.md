@@ -179,8 +179,9 @@ bash tools/demo_reset.sh
 **5) 터미널 3개** — Windows Terminal에서 Ubuntu 탭을 3개 열고 위
 [터미널 3개](#2-터미널-3개) 표의 명령을 그대로 쓴다.
 
-**6) 브라우저** — Windows 쪽 Chrome/Edge에서 `http://127.0.0.1:8000` 을 그대로 열면 된다
-(WSL2가 localhost를 포워딩한다). 열리지 않으면:
+**6) 브라우저** — Windows 쪽 Chrome/Edge에서 `http://127.0.0.1:8000`(개발 형태) 또는
+`https://localhost:9443`(운영 형태, 진단 대상)을 그대로 열면 된다 (WSL2가 localhost를 포워딩한다).
+운영 형태를 쓰려면 Docker Desktop의 **WSL2 통합**을 켜 둬야 한다. 열리지 않으면:
 
 ```bash
 # WSL 안에서 접근되는지 먼저 확인
@@ -615,8 +616,9 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 - 플래그를 켜는 방법은 `.env`에 `VULN_W08=true` 처럼 적는 것이다. 하나라도 켜져 있으면
   기동 로그에 `취약 플래그가 켜져 있다(실습 전용): …` 경고가 찍힌다.
   **진단 전에 이 줄로 상태를 확인한다.**
-- 서버·AWS 설정 영역의 취약(U-03, U-07, A-01, C-03 등)은 앱 코드 범위 밖이라
-  나중에 `ops/apply_vuln.sh` · `ops/revert_vuln.sh`로 만든다.
+- **웹서버(Apache) 설정 취약**은 `ops/apply_vuln.sh` · `ops/revert_vuln.sh`로 전환한다(D91).
+  디렉터리 목록·버전 노출·TRACE·HSTS·평문 접속 등 6가지가 한 번에 바뀐다.
+- AWS 설정 영역의 취약(C-05 SSH 개방, C-12 로그 무결성, C-15·C-16 등)은 배포 단계에서 만든다.
 - **진단 범위**: 설정 점검이 기본이고, 설정만으로 판정할 수 없는 웹 항목은
   **가상 데이터와 테스트 계정으로 요청을 재현해 확인하는 데까지만** 한다.
   실제 공격·데이터 탈취는 하지 않는다.
