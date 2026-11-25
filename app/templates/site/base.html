@@ -24,7 +24,6 @@
     <strong>실습용 가상 사이트</strong> ·
     실제로 존재하는 회사가 아니며, 보안 진단 실습을 위해 만든 격리 환경입니다.
     실제 개인정보를 입력하지 마세요.
-    <a href="{{ url_for('site.demo') }}">실습 안내</a>
   </div>
 </div>
 
@@ -33,7 +32,7 @@
     <a class="brand" href="{{ url_for('site.index') }}">
       <img src="{{ url_for('static', filename='site/logo-mark.svg') }}" alt="">
       <span class="brand-text">
-        <span class="brand-name">인증정보평가</span>
+        <span class="brand-name">(주)인증정보평가</span>
         <span class="brand-sub">IJ-INFO</span>
       </span>
     </a>
@@ -65,8 +64,10 @@
         </div>
         <p class="foot-meta">
           주식회사 인증정보평가 (IJ-info Co., Ltd.)<br>
-          대표이사 홍길동 · 사업자등록번호 000-00-00000 (가상)<br>
-          서울특별시 ○○구 ○○대로 00, 00층 (실습용 가상 주소)
+          대표이사 김길동 · 개인정보보호책임자 김길동<br>
+          사업자등록번호 214-81-01233 · 통신판매업신고 2019-서울강남-04812<br>
+          (06192) 서울특별시 강남구 테헤란로 418, 9층<br>
+          대표전화 02-6200-7700 · 팩스 02-6200-7709
         </p>
       </div>
       <div>
@@ -82,7 +83,7 @@
       <div>
         <h4>고객지원</h4>
         <ul class="foot-links">
-          <li>대표번호 02-0000-0000 (가상)</li>
+          <li>고객센터 1600-7700</li>
           <li>평일 09:00 ~ 18:00</li>
           <li><a href="{{ url_for('site.support') }}">문의 남기기</a></li>
           <li><a href="{{ url_for('admin.login') }}">임직원 로그인</a></li>
@@ -90,7 +91,7 @@
       </div>
     </div>
     <div class="foot-bottom">
-      <span>© 2026 주식회사 인증정보평가. 실습용 가상 사이트.</span>
+      <span>© 2026 IJ-info Co., Ltd. 기재된 회사 정보는 실습용 가상 정보입니다.</span>
       <span>SK쉴더스 루키즈 최종 프로젝트 · 개인정보 처리 수탁사 점검 컨설팅</span>
     </div>
   </div>

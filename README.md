@@ -345,7 +345,7 @@ git diff ops/apache/active.conf   # 지금 어느 상태인지
 | **자료실** | `/library`, `/library/download` | 공개 문서 목록·검색·내려받기. DB를 쓰는 검색이다 |
 | 고객지원·문의 폼 | `/support` | CSRF 토큰이 있는 POST 폼 |
 | 개인정보 처리방침 | `/privacy` | 구현된 보유기간·안전조치와 내용을 맞췄다 |
-| 실습 안내 | `/demo` | 진단 대상 목록과 시작 방법 |
+| 실습 안내 | `/demo` | 진단 대상 목록과 시작 방법. **상단 메뉴에는 넣지 않는다** — 진짜 회사 사이트처럼 보이게 하려는 것이라 주소로만 들어간다 |
 | 인증창 | `/verify/…` | **직접 못 연다.** 위탁사의 IA-01 요청으로 받은 1회용 주소로만 (`tools/fake_exchange.py request`) |
 | 관리자 콘솔 | `/admin/login` | `flask create-admin`으로 만든 계정 + TOTP |
 | 서버 간 API | `/api/v1/…` | `X-Api-Key` + `X-Timestamp` + `X-Signature` |
