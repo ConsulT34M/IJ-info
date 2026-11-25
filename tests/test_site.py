@@ -52,11 +52,39 @@ def test_public_pages_keep_security_headers(client, path):
 
 @pytest.mark.parametrize("path", PUBLIC_PATHS)
 def test_public_pages_have_no_inline_style_or_script(client, path):
-    """CSP에 'unsafe-inline'이 없으므로 inline style·script를 쓰면 화면이 깨진다."""
+    """CSP에 'unsafe-inline'이 없다. inline style·script를 쓰면 화면이 깨진다.
+
+    외부 파일(`<script src=...>`)은 script-src 'self'로 허용된다. 그래서 '스크립트 금지'가
+    아니라 **본문이 들어간 script 태그 금지**로 본다.
+    """
     html = client.get(path).get_data(as_text=True)
     assert 'style="' not in html
     assert "<style" not in html
-    assert "<script" not in html
+    for tag in re.findall(r"<script\b[^>]*>", html):
+        assert "src=" in tag, f"본문이 들어간 script 태그다: {tag}"
+
+
+@pytest.mark.parametrize("path", PUBLIC_PATHS)
+def test_public_pages_load_the_site_script(client, path):
+    """등장 효과·카운터는 외부 파일 하나로만 들어간다."""
+    html = client.get(path).get_data(as_text=True)
+    assert "/static/site/site.js" in html
+
+
+def test_site_script_is_served(client):
+    response = client.get("/static/site/site.js")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "IntersectionObserver" in body
+    # 움직임을 줄이기로 한 사용자에게는 효과를 걸지 않는다
+    assert "prefers-reduced-motion" in body
+
+
+def test_the_page_still_reads_without_javascript(client):
+    """스크립트가 막혀도 본문이 보여야 한다. 등장 효과는 .js가 붙었을 때만 적용된다."""
+    css = client.get("/static/site/site.css").get_data(as_text=True)
+    assert ".js .reveal" in css
+    assert "\n.reveal {" not in css  # .js 없이 숨기는 규칙이 있으면 안 된다
 
 
 def test_home_shows_latest_notices(client):

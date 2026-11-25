@@ -487,3 +487,162 @@ textarea { min-height: 150px; resize: vertical; }
   .nav a { padding: 11px 12px; border-radius: 10px; }
   .table-plain th { width: 38%; }
 }
+
+/* ======================================================================
+   움직임 (site.js와 짝)
+   자바스크립트가 꺼져 있으면 .js가 붙지 않아 아래 규칙이 전부 적용되지 않는다.
+   즉 효과 없이 처음부터 보이는 상태가 기본이다.
+   ====================================================================== */
+
+.js .reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity .55s cubic-bezier(.22, .61, .36, 1),
+              transform .55s cubic-bezier(.22, .61, .36, 1);
+  will-change: opacity, transform;
+}
+.js .reveal.is-in { opacity: 1; transform: none; }
+
+/* 히어로는 들어오자마자 시간차로 올라온다 */
+.js .hero .eyebrow,
+.js .hero h1,
+.js .hero-lead,
+.js .flowcard {
+  animation: ij-rise .7s cubic-bezier(.22, .61, .36, 1) both;
+}
+.js .hero .eyebrow { animation-delay: .05s; }
+.js .hero h1 { animation-delay: .14s; }
+.js .hero-lead { animation-delay: .23s; }
+.js .flowcard { animation-delay: .3s; }
+
+@keyframes ij-rise {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 흐름 카드의 번호는 통통 */
+.js .flowcard.is-in .flownum { animation: ij-pop .45s cubic-bezier(.34, 1.56, .64, 1) both; }
+.js .flowcard.is-in .flowstep:nth-child(2) .flownum { animation-delay: .34s; }
+.js .flowcard.is-in .flowstep:nth-child(3) .flownum { animation-delay: .42s; }
+.js .flowcard.is-in .flowstep:nth-child(4) .flownum { animation-delay: .5s; }
+.js .flowcard.is-in .flowstep:nth-child(5) .flownum { animation-delay: .58s; }
+
+@keyframes ij-pop {
+  from { transform: scale(.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---------- 머리말: 내리면 얇아지고 그림자 ---------- */
+.site-head {
+  transition: box-shadow .25s ease, background-color .25s ease;
+}
+.site-head .wrap { transition: min-height .25s ease; }
+.site-head.is-stuck {
+  box-shadow: 0 1px 0 rgba(20, 35, 13, .06), 0 10px 24px -18px rgba(20, 35, 13, .5);
+  background: rgba(255, 255, 255, .96);
+}
+.site-head.is-stuck .wrap { min-height: 58px; }
+.brand img { transition: transform .25s ease; }
+.brand:hover img { transform: rotate(-6deg) scale(1.06); }
+
+/* 읽은 분량 막대 */
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--ij-lime), var(--ij-green));
+  z-index: 60;
+  pointer-events: none;
+}
+
+/* 메뉴에 밑줄이 자라게 */
+.nav a { position: relative; transition: color .18s ease, background-color .18s ease; }
+.nav a::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ij-green);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform .22s cubic-bezier(.22, .61, .36, 1);
+}
+.nav a:hover::after, .nav a.on::after { transform: scaleX(1); }
+
+/* ---------- 카드·목록 hover ---------- */
+.card {
+  transition: transform .25s cubic-bezier(.22, .61, .36, 1),
+              box-shadow .25s ease, border-color .25s ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--ij-lime-soft);
+  box-shadow: 0 14px 30px -18px rgba(20, 35, 13, .45);
+}
+.card:hover .card-icon {
+  background: linear-gradient(135deg, var(--ij-lime), var(--ij-green));
+  border-color: transparent;
+  color: #fff;
+}
+.card-icon { transition: background .25s ease, color .25s ease, border-color .25s ease; }
+
+.linklist a { transition: background-color .2s ease, padding-left .2s ease; }
+.linklist a:hover { padding-left: 12px; }
+.linklist .t { transition: color .2s ease; }
+.linklist a:hover .t { color: var(--ij-green-dark); }
+
+.btn { transition: transform .18s ease, box-shadow .22s ease, filter .18s ease, border-color .18s ease, color .18s ease; }
+.btn-main:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -10px rgba(95, 168, 42, .55); }
+.btn-main:active, .btn-ghost:active { transform: translateY(0); }
+.btn-ghost:hover { transform: translateY(-2px); }
+
+.stat b { transition: transform .25s ease; display: block; }
+.stat:hover b { transform: scale(1.06); }
+
+.faq summary { transition: color .18s ease; }
+.faq summary:hover { color: var(--ij-green-dark); }
+.faq details[open] summary { color: var(--ij-green-dark); }
+
+.table-plain tbody tr { transition: background-color .18s ease; }
+.table-plain tbody tr:hover { background: var(--ij-bg-soft); }
+
+/* ---------- 맨 위로 ---------- */
+.to-top {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--ij-line);
+  background: #fff;
+  color: var(--ij-green-dark);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--ij-shadow);
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease, background-color .2s ease, color .2s ease;
+  z-index: 55;
+}
+.to-top.is-shown { opacity: 1; transform: none; pointer-events: auto; }
+.to-top:hover { background: var(--ij-green); color: #fff; border-color: var(--ij-green); }
+
+/* 움직임을 줄이기로 한 사용자에게는 전부 끈다 */
+@media (prefers-reduced-motion: reduce) {
+  .js .reveal { opacity: 1; transform: none; transition: none; }
+  .js .hero .eyebrow, .js .hero h1, .js .hero-lead, .js .flowcard,
+  .js .flowcard.is-in .flownum { animation: none; }
+  .card:hover, .btn-main:hover, .btn-ghost:hover, .stat:hover b { transform: none; }
+  .scroll-progress { display: none; }
+  html { scroll-behavior: auto; }
+}
