@@ -332,7 +332,9 @@ img, svg { max-width: 100%; }
   font-size: 13.5px;
 }
 
-.notice-body { border-top: 1px solid var(--ij-line); padding-top: 28px; margin-top: 22px; }
+.notice-body { border-top: 1px solid var(--ij-line); padding-top: 28px; margin-top: 34px; }
+/* 공지 상세는 머리말이 이미 구분선 역할을 해서 본문을 바로 시작한다 */
+.section-tight { padding-top: 44px; }
 .notice-meta { display: flex; gap: 12px; align-items: center; font-size: 14px; color: var(--ij-ink-soft); }
 .pager { display: flex; gap: 6px; justify-content: center; margin-top: 30px; }
 .pager a, .pager span {
