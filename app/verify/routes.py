@@ -274,8 +274,11 @@ def phone_confirm():
     phone_row = _ensure_phone_row(verification)
     otp_row = db.session.get(PhoneOtp, verification.id)
 
-    if otp_row is None or otp_row.code_mac is None:
+    if otp_row is None:
         return _render_phone_form(verification, error="인증번호를 먼저 받아 주세요.", status=400)
+    if otp_row.code_mac is None:
+        # 이미 쓰인 인증번호다. 동시 제출·더블클릭의 진 쪽이므로 틀린 번호가 아니다(D88).
+        return _already_used_code(verification)
     if is_expired(otp_row.code_expires_at):
         return _render_otp_form(
             verification, otp_row, error="인증번호 유효시간이 지났습니다. 재발송해 주세요.", status=400
@@ -299,6 +302,18 @@ def phone_confirm():
 
     if consumed.rowcount != 1:
         db.session.rollback()
+        # UPDATE가 0행이라고 해서 전부 '틀린 번호'는 아니다(D88). 같은 번호가 동시에
+        # 들어오거나 확인 버튼을 두 번 누르면 한쪽만 성공하고, 진 쪽도 여기로 온다.
+        # 맞는 번호를 넣고도 시도 횟수가 깎이면 P02로 종결될 수 있어 사유를 가려낸다.
+        fresh = db.session.get(PhoneOtp, verification.id)
+        if fresh is None or fresh.code_mac is None:
+            return _already_used_code(verification)
+        if is_expired(fresh.code_expires_at):
+            # 검사와 UPDATE 사이에 만료된 경우다. 불일치가 아니므로 횟수를 올리지 않는다.
+            return _render_otp_form(
+                verification, fresh, error="인증번호 유효시간이 지났습니다. 재발송해 주세요.", status=400
+            )
+
         phone_row.otp_attempts += 1
         attempts = phone_row.otp_attempts
         db.session.commit()
@@ -341,6 +356,19 @@ def phone_confirm():
     advance_stage(verification, "ID_CARD")
     db.session.commit()
     current_app.logger.info("CI 수령: verification_id=%s", verification.id)
+    return stage_redirect(verification)
+
+
+
+def _already_used_code(verification: Verification):
+    """이미 소비된 인증번호로 다시 들어온 요청(D88).
+
+    맞는 번호를 두 번 보낸 것이지 틀린 번호가 아니므로 시도 횟수를 올리지 않는다.
+    먼저 도착한 요청이 아직 다음 단계로 못 올렸을 수 있어 현재 단계로 돌려보낸다.
+    """
+    current_app.logger.info("이미 사용된 인증번호 재제출: verification_id=%s", verification.id)
+    if verification.is_finished:
+        abort(409)
     return stage_redirect(verification)
 
 

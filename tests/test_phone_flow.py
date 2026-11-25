@@ -336,3 +336,116 @@ def _rewind_issue_window(verification_id, person, *, seconds: int) -> None:
     inbox = db.session.get(TestPhone, phone_key(person["phone_number"]))
     inbox.next_issue_at = now_utc() - timedelta(seconds=1)
     db.session.commit()
+
+
+# --- D88: 같은 인증번호가 두 번 들어와도 시도 횟수를 깎지 않는다 -------------------
+
+
+def _consume_otp_without_advancing(verification_id) -> None:
+    """먼저 도착한 요청이 인증번호를 쓰고 아직 stage를 못 올린 순간을 만든다.
+
+    실제로는 MC-02 호출(네트워크) 동안 열려 있는 창이다. 이 사이에 같은 번호가
+    한 번 더 들어오면 조건부 UPDATE가 0행이 된다.
+    """
+    otp = db.session.get(PhoneOtp, verification_id)
+    otp.code_mac = None
+    otp.inbox_ciphertext = None
+    db.session.commit()
+
+
+def test_resubmitting_a_consumed_code_does_not_burn_an_attempt(flow, carrier_backend, person):
+    """D88: 맞는 번호를 두 번 보낸 것이지 틀린 번호가 아니다."""
+    flow.to_phone()
+    flow.request_otp(person["name"], person["phone_number"])
+    code = flow.inbox_code(person["inbox_key"])
+    _consume_otp_without_advancing(flow.verification_id)
+
+    response = flow.confirm_otp(code)
+
+    assert response.status_code == 302  # 현재 단계 화면으로 보낸다
+    phone = db.session.get(PhoneVerification, flow.verification_id)
+    assert phone.otp_attempts == 0
+    assert db.session.get(Verification, flow.verification_id).status == "PENDING"
+
+
+def test_a_consumed_code_never_terminates_the_case(flow, carrier_backend, person):
+    """상한(3회)만큼 다시 보내도 P02로 종결되지 않는다. 이게 원래 버그였다."""
+    flow.to_phone()
+    flow.request_otp(person["name"], person["phone_number"])
+    code = flow.inbox_code(person["inbox_key"])
+    _consume_otp_without_advancing(flow.verification_id)
+
+    for _ in range(4):
+        assert flow.confirm_otp(code).status_code == 302
+
+    verification = db.session.get(Verification, flow.verification_id)
+    assert verification.status == "PENDING" and verification.reason_code is None
+    assert db.session.get(PhoneVerification, flow.verification_id).otp_attempts == 0
+
+
+def test_a_wrong_code_still_burns_an_attempt(flow, carrier_backend, person):
+    """경계: 진짜 불일치는 지금처럼 횟수를 깎는다."""
+    flow.to_phone()
+    flow.request_otp(person["name"], person["phone_number"])
+    code = flow.inbox_code(person["inbox_key"])
+    wrong = "000000" if code != "000000" else "111111"
+
+    response = flow.confirm_otp(wrong)
+
+    assert response.status_code == 400
+    assert "일치하지 않습니다" in response.get_data(as_text=True)
+    assert db.session.get(PhoneVerification, flow.verification_id).otp_attempts == 1
+
+
+def test_a_consumed_code_on_a_finished_case_is_refused(flow, carrier_backend, person, sent_webhooks):
+    """먼저 도착한 요청이 P05 등으로 종결시켰다면 다음 단계로 보내지 않는다.
+
+    종결 시 entry_nonce를 지우므로 stage 가드가 410으로 먼저 끊는다. 어느 쪽이든
+    "진행"으로 이어지지 않고 시도 횟수도 깎이지 않는다는 점이 중요하다.
+    """
+    from app.verify.termination import terminate
+
+    flow.to_phone()
+    flow.request_otp(person["name"], person["phone_number"])
+    code = flow.inbox_code(person["inbox_key"])
+    _consume_otp_without_advancing(flow.verification_id)
+    terminate(db.session.get(Verification, flow.verification_id), "P05")
+
+    response = flow.confirm_otp(code)
+    assert response.status_code == 410
+    assert db.session.get(PhoneVerification, flow.verification_id).otp_attempts == 0
+
+
+def test_losing_the_atomic_update_does_not_burn_an_attempt(
+    flow, carrier_backend, person, monkeypatch
+):
+    """진짜 경합 순서를 재현한다(D88).
+
+    사전 검사 시점에는 인증번호가 살아 있었는데, 조건부 UPDATE 직전에 다른 요청이
+    먼저 써 버린 경우다. `code_mac()`이 불리는 순간 행을 비워서 그 틈을 만든다.
+    예전에는 이 경로가 '불일치'로 세어져, 맞는 번호를 넣고도 P02로 종결될 수 있었다.
+    """
+    from app.common.phone import code_mac as real_code_mac
+
+    flow.to_phone()
+    flow.request_otp(person["name"], person["phone_number"])
+    code = flow.inbox_code(person["inbox_key"])
+    verification_id = flow.verification_id
+
+    def _steal_then_compute(vid, value):
+        db.session.execute(
+            db.update(PhoneOtp)
+            .where(PhoneOtp.verification_id == verification_id)
+            .values(code_mac=None, inbox_ciphertext=None)
+        )
+        db.session.commit()
+        monkeypatch.setattr("app.verify.routes.code_mac", real_code_mac)  # 한 번만
+        return real_code_mac(vid, value)
+
+    monkeypatch.setattr("app.verify.routes.code_mac", _steal_then_compute)
+
+    response = flow.confirm_otp(code)
+
+    assert response.status_code == 302
+    assert db.session.get(PhoneVerification, verification_id).otp_attempts == 0
+    assert db.session.get(Verification, verification_id).status == "PENDING"

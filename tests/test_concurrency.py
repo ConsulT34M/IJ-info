@@ -78,7 +78,11 @@ def test_otp_confirm_succeeds_once(app, live_server, flow, carrier_backend, clie
         ).status_code
     )
 
-    assert results[302] == 1, results  # 성공은 한 번뿐
+    # D88: 맞는 번호를 동시에 보낸 것이므로 진 쪽을 '틀린 번호'로 세면 안 된다.
+    # 진 쪽도 302로 현재 단계에 돌아간다(먼저 올라갔으면 403). "성공 1회"는
+    # 상태 코드가 아니라 아래 증적(OTP_VERIFIED·CI_ISSUED·MC-02 호출)으로 확인한다.
+    assert set(results) <= {302, 403}, results
+    assert results.get(302, 0) >= 1, results
     assert sum(results.values()) == PARALLEL
 
     db.session.expire_all()
@@ -88,6 +92,9 @@ def test_otp_confirm_succeeds_once(app, live_server, flow, carrier_backend, clie
     phone = db.session.get(PhoneVerification, verification_id)
     assert phone.status == "PASSED" and len(phone.ci) == 88
     assert phone.match_token_enc is None
+    # D88: 맞는 번호였으므로 시도 횟수가 한 번도 깎이지 않아야 한다.
+    # 예전에는 여기서 3이 되어 맞는 번호인데도 P02로 종결됐다.
+    assert phone.otp_attempts == 0
 
     otp = db.session.get(PhoneOtp, verification_id)
     assert otp.code_mac is None and otp.inbox_ciphertext is None
