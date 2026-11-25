@@ -288,6 +288,52 @@ $env:EKYC_API_KEY = "..."; $env:EKYC_HMAC_SECRET = "..."
 
 ---
 
+## 운영 형태로 띄우기 (Apache → Gunicorn → Flask)
+
+개발 중에는 `flask run` 하나로 충분하지만, **진단 대상으로 쓸 때는 compose 스택**을 쓴다.
+노션 구성도의 EC2 구성을 그대로 줄여 놓은 것이라 웹서버·OS·DBMS 점검 항목이 함께 생긴다.
+
+```
+브라우저 ──9443/https──▶ web(Apache 2.4) ──8000──▶ app(Gunicorn+Flask) ──5432──▶ db(PostgreSQL 16)
+```
+
+```bash
+./ops/make_web_certs.sh        # 로컬 TLS 인증서 (처음 한 번)
+docker compose up -d --build
+open https://localhost:9443    # 자체 서명이라 경고가 뜬다. 진행하면 된다.
+```
+
+| | 주소 | 비고 |
+|---|---|---|
+| 웹서버(https) | <https://localhost:9443> | 진단은 여기로 한다 |
+| 웹서버(http) | <http://localhost:9080> | 양호 설정에서는 https로 301 |
+| 앱·DB | — | **호스트로 열지 않는다.** web 컨테이너만 접근한다 |
+
+- 모의 통신사는 호스트에서 따로 띄운다(`python -m carrier`). 컨테이너는
+  `host.docker.internal:8443`으로 부른다.
+- `instance/`를 호스트와 공유하므로 `tools/demo_reset.sh` 한 번이면 양쪽 다 선다.
+
+### 웹서버 양호/취약 전환
+
+```bash
+./ops/apply_vuln.sh     # 의도된 취약 설정으로
+./ops/revert_vuln.sh    # 양호 기준으로 되돌림
+git diff ops/apache/active.conf   # 지금 어느 상태인지
+```
+
+| 점검 항목 | 양호 | 취약 |
+|---|---|---|
+| 디렉터리 목록 노출 | 403 | 200 (목록 그대로) |
+| HSTS 헤더 | 있음 | 없음 |
+| http 평문 접속 | 301 → https | 200 (평문 서비스) |
+| 에러 화면에 버전·OS | 없음 | `Apache/2.4.71 (Unix) OpenSSL/3.5.9` |
+| TRACE 메서드 | 405 | 200 |
+| Server 헤더 | `Apache` | `gunicorn` |
+
+앱 코드 쪽 취약은 `VULN_*` 환경변수로 따로 켠다. 둘은 독립이다.
+
+---
+
 ## 진단 대상 화면
 
 `flask run` 하나로 아래가 전부 뜬다. 모두 `127.0.0.1:8000`이다.

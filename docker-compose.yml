@@ -1,5 +1,52 @@
-# 로컬 개발용 PostgreSQL 16. 127.0.0.1에만 바인딩한다.
+# 로컬 실습 스택. 운영 형태(EC2: Apache 2.4 → Gunicorn → Flask, RDS PostgreSQL)를
+# 그대로 줄여 놓은 것이다. 진단 대상이 앱 하나가 아니라 웹서버·OS·DBMS까지 생긴다.
+#
+#   브라우저 ──9443──▶ web(Apache) ──8000──▶ app(Gunicorn+Flask) ──5432──▶ db(PostgreSQL)
+#
+# 모든 포트는 127.0.0.1에만 바인딩한다. app과 db는 호스트로 열지 않는다(web만 연다).
 services:
+  web:
+    build: ./ops/apache
+    container_name: ekyc-web
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      # 8443은 모의 통신사가 쓰므로 웹서버는 9080/9443을 쓴다
+      - "127.0.0.1:9080:80"
+      - "127.0.0.1:9443:443"
+    volumes:
+      # 양호/취약 전환: ops/apply_vuln.sh 가 active.conf 를 바꿔 끼운다
+      - ./ops/apache/active.conf:/usr/local/apache2/conf/ekyc.conf:ro
+      - ./ops/certs:/usr/local/apache2/conf/certs:ro
+      - ./app/static:/srv/static:ro
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: ekyc-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      EKYC_ENV: dev
+      # Apache가 덮어쓴 X-Real-IP만 믿는다
+      TRUST_PROXY: "true"
+      PUBLIC_BASE_URL: https://localhost:9443
+      EKYC_SECRET_EKYC_DB: postgresql+psycopg://ekyc:ekyc@db:5432/ekyc
+      # 모의 통신사는 호스트에서 띄운 것을 쓴다(운영에서는 별도 EC2·VPC 피어링)
+      CARRIER_BASE_URL: https://host.docker.internal:8443
+      TEST_INBOX_ALLOWED_IPS: 127.0.0.1,::1,172.16.0.0/12
+      TZ: Asia/Seoul
+    volumes:
+      # 시크릿·세션·업로드는 호스트와 공유한다. demo_reset.sh 한 번이면 양쪽 다 선다.
+      - ./instance:/srv/ekyc/instance
+      - ./carrier/certs:/srv/ekyc/carrier/certs:ro
+      - ./seed:/srv/ekyc/seed
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   db:
     image: postgres:16
     container_name: ekyc-db

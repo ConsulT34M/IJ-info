@@ -652,3 +652,12 @@ textarea { min-height: 150px; resize: vertical; }
   .scroll-progress { display: none; }
   html { scroll-behavior: auto; }
 }
+
+/* 실습 고지줄 안의 링크. 상단 메뉴에서 뺀 '실습 안내'가 여기로 왔다. */
+.labbar a {
+  color: var(--ij-warn-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+.labbar a:hover { color: #4a3a09; }

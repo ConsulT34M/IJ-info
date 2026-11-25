@@ -24,6 +24,7 @@
     <strong>실습용 가상 사이트</strong> ·
     실제로 존재하는 회사가 아니며, 보안 진단 실습을 위해 만든 격리 환경입니다.
     실제 개인정보를 입력하지 마세요.
+    <a href="{{ url_for('site.demo') }}">실습 안내</a>
   </div>
 </div>
 
@@ -46,7 +47,6 @@
       <a href="{{ url_for('site.notices') }}" class="{{ 'on' if active == 'notices' }}">공지사항</a>
       <a href="{{ url_for('site.library') }}" class="{{ 'on' if active == 'library' }}">자료실</a>
       <a href="{{ url_for('site.support') }}" class="{{ 'on' if active == 'support' }}">고객지원</a>
-      <a href="{{ url_for('site.demo') }}" class="{{ 'on' if active == 'demo' }}">실습 안내</a>
     </nav>
   </div>
 </header>
