@@ -18,11 +18,28 @@ uv venv --python 3.11
 uv pip install -r requirements.txt
 ```
 
-## 1단계까지 쓸 수 있는 것
+## 로컬 실행
 
 ```bash
+cp .env.example .env                   # FLASK_APP=app, EKYC_ENV=dev, 취약 플래그 전부 false
+docker compose up -d                   # PostgreSQL 16 (127.0.0.1:5432에만 바인딩)
 .venv/bin/python seed/make_people.py   # 가상 인물 10명 → seed/people.json (마스킹 요약만 출력)
-.venv/bin/python -m pytest -q          # 단위 테스트
+.venv/bin/flask db upgrade             # 13개 테이블 생성
+.venv/bin/flask seed                   # 개발용 시크릿 + 진위확인 대장 + 테스트 수신함 적재
+.venv/bin/flask run                    # http://127.0.0.1:5000/healthz
+```
+
+위탁사·관리자 등록 (API Key·HMAC Secret·TOTP URI는 **생성 시 한 번만** 출력된다):
+
+```bash
+.venv/bin/flask create-client --name "SILO 거래소"   --callback-url http://127.0.0.1:9000/callback --allowed-ips 127.0.0.1
+.venv/bin/flask create-admin --login-id admin1 --role admin --allowed-ips 127.0.0.1
+```
+
+## 테스트
+
+```bash
+.venv/bin/python -m pytest -q   # DB는 SQLite 메모리를 쓴다(docker 없이도 돈다)
 ```
 
 `seed/people.json`, `instance/`, 인증서, 업로드 파일은 커밋하지 않는다(.gitignore).

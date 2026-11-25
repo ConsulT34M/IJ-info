@@ -73,12 +73,16 @@ E01~E05 실패를 `face_attempts` 하나에 합산하고, **3번째 실패 응�
 (값은 최대 3, CHECK `BETWEEN 0 AND 3` 유지. 10장의 "3회 초과"를 "3회 도달"로 읽는다.)
 X01은 이 카운터와 무관하게 즉시 종결한다.
 
-## D11. 인증번호 재발송 60초 제한의 기준점
+## D11. 인증번호 재발송 제한 (간격 + 횟수)
 
-`phone_otps.issued_at`(건 단위)과 `test_phones.next_issue_at`(번호 단위)을 **둘 다** 확인하고
-하나라도 미래면 429. 발송 성공 시 `issued_at`을 갱신하고 `next_issue_at = now + 60초`로 둔다.
-번호 단위 제한이 있어야 IA-01로 새 건을 만들어 60초 제한을 우회하는 걸 막는다.
-재발송 **총 횟수 상한은 두지 않는다**(건 전체 20분 만료가 상한, `issue_no`로 기록만 남긴다).
+**간격**: `phone_otps.issued_at`(건 단위)과 `test_phones.next_issue_at`(번호 단위)을 **둘 다**
+확인하고 하나라도 미래면 429. 발송 성공 시 `issued_at`을 갱신하고 `next_issue_at = now + 60초`로
+둔다. 번호 단위 제한이 있어야 IA-01로 새 건을 만들어 60초 제한을 우회하는 걸 막는다.
+
+**횟수**: 건당 발송은 **5회까지**(`phone_otps.issue_no` 기준, 최초 발송 포함).
+초과하면 **429**로 거부하고 **건은 종결하지 않는다**(이용자는 취소하거나 20분 만료를 기다린다).
+상한이 없으면 W-11(인증번호 발송 횟수 제한)이 취약으로 판정될 수 있어 넣었다.
+설정값은 `Config.OTP_MAX_ISSUES = 5`.
 
 ## D12. IA-01 재요청 시 응답 → 0.2절 참고
 
@@ -121,8 +125,18 @@ X01은 이 카운터와 무관하게 즉시 종결한다.
 ## D17. 암호문 형식과 AAD
 
 AES-256-GCM, 저장 형식은 `nonce(12바이트) + 암호문·태그`. 키는 32바이트이고 `dev_secrets.json`에는
-Base64 문자열로 둔다. `crypto.encrypt/decrypt`는 AAD를 받을 수 있게 열어 두고, 어느 컬럼에 무엇을
-묶을지는 2단계(모델)에서 정한다.
+Base64 문자열로 둔다.
+
+**AAD는 행 식별자로 묶는다.** `crypto.aad(table, column, row_id)`가 `테이블:컬럼:행 식별자` 바이트를
+만들고, 모든 암복호화가 이 값을 쓴다. 다른 행의 암호문을 복사해 넣으면 복호화가 실패한다(행 치환 방지).
+
+| 암호문 | 키 | AAD |
+|---|---|---|
+| `id_documents.rrn_enc` | `ekyc/rrn-key` | `id_documents:rrn_enc:{verification_id}` |
+| `phone_verifications.match_token_enc` | `ekyc/phone/match-token-key` | `phone_verifications:match_token_enc:{verification_id}` |
+| `phone_otps.inbox_ciphertext` | `ekyc/phone/inbox-key` | `phone_otps:inbox_ciphertext:{verification_id}` |
+| `admins.otp_secret` | `ekyc/admin-otp-key` | `admins:otp_secret:{admin id}` |
+| 통신사 `subscriber.rrn_ciphertext` | `carrier/rrn-key` | `subscriber:rrn_ciphertext:{subscriber_ref}` |
 
 ## D18. 시크릿 파일
 
@@ -137,3 +151,61 @@ Base64 문자열로 둔다. `crypto.encrypt/decrypt`는 AAD를 받을 수 있게
 성별 자리에 맞춰 Faker의 `name_male`/`name_female`을 쓴다.
 `person_no == 9`인 인물을 진위확인 대장에서 `분실`로 등록한다(E03 테스트용. 1부터 센 9번째).
 발급일자는 만 17세 이후 ~ 어제 사이. `seed/people.json`은 커밋하지 않는다(권한 600).
+
+---
+
+## 2단계 구현 세부
+
+## D20. 모델은 특정 DB에 묶지 않는다 (운영 PostgreSQL, 테스트 SQLite)
+
+개발·운영은 PostgreSQL 16(docker compose)이고 마이그레이션도 PostgreSQL 기준이다.
+다만 모델에는 PostgreSQL 전용 타입을 쓰지 않아서(`ARRAY` → `JSON`, UUID는 `sa.Uuid`)
+테스트는 SQLite 메모리 DB에서 `create_all()`로 돌린다. docker 없이도 테스트가 돌아간다.
+동시성 제어는 `SELECT ... FOR UPDATE` 대신 **조건부 원자적 UPDATE + rowcount 확인**을 기본으로
+쓴다(두 DB에서 같이 동작하고, 8장 요구를 만족한다).
+
+## D21. dev에서는 시크릿 파일을 자동 생성한다
+
+`create_app()`이 `instance/dev_secrets.json`이 없으면 만든다. `EKYC_ENV=production`이면 만들지 않고
+없으면 기동에 실패한다(시크릿은 Secrets Manager에서 와야 하므로).
+
+## D22. 세션 쿠키 Secure는 환경에 따라 다르다
+
+`EKYC_ENV=production`이면 `SESSION_COOKIE_SECURE=True`(+ HSTS 헤더, `WTF_CSRF_SSL_STRICT`),
+로컬 dev는 http로 띄우기 때문에 False다. `SESSION_COOKIE_SECURE` 환경변수로 직접 켤 수도 있다.
+HttpOnly·SameSite=Lax는 환경과 무관하게 항상 켠다. **진단 대상 배포본은 production으로 띄운다.**
+
+## D23. 시각은 naive UTC로 저장하고 KST로 보여준다
+
+DB 컬럼은 tz 없는 `DateTime`이고 값은 항상 UTC다(PostgreSQL·SQLite에서 같은 값이 나오게).
+화면·웹훅·API 응답은 `timeutil.kst_isoformat()`으로 `+09:00` 문자열로 바꿔 내보낸다.
+
+## D24. `app/common/timeutil.py` 추가
+
+명세 3장의 common 목록에 없던 모듈이다. `now_utc()`, `to_kst()`, `kst_isoformat()`,
+`seconds_left()`, `is_expired()`만 둔다. 만료 판정이 여러 곳에 흩어지지 않게 모았다.
+
+## D25. 시크릿 `ekyc/admin-otp-key` 추가
+
+12장 목록에 관리자 TOTP 시크릿을 암호화할 키가 없었다. 주민번호 키를 재사용하지 않고 별도 키를 둔다.
+
+## D26. 대리 키(surrogate PK)를 쓴 테이블
+
+명세 11장이 PK를 적지 않은 테이블에는 `id`(BigInteger, 자동증가)를 둔다:
+`consents`, `callbacks`, `access_logs`, `phone_events`, `face_checks`, `mock_mois_registry`.
+
+- `consents`: `UNIQUE(verification_id, type)` — 동의 종류별 1건
+- `mock_mois_registry`: `UNIQUE(rrn_hash)` — 대장은 사람당 1건
+- `face_checks`: 얼굴 시도마다 행을 남긴다(최대 3행)
+- `phone_otps`·`phone_verifications`·`id_documents`는 명세대로 `verification_id`가 PK다
+
+## D27. 명세에 없던 CHECK 제약 3개
+
+- `verifications`: `(status='PENDING' AND reason_code IS NULL) OR (status<>'PENDING' AND reason_code IS NOT NULL)`
+  — "진행 중 NULL"을 DB에서 강제한다(D8과 짝).
+- `access_logs`: `HISTORY_DOWNLOAD`·`IMAGE_VIEW`는 `reason`이 비어 있으면 INSERT 불가(15장 요구).
+- `phone_events`: `name_mask`·`phone_mask`는 `IDENTITY_MATCH`에서만 NULL이 아닐 수 있다(11장 요구).
+
+## D28. 약관 버전은 `v1.0` 고정
+
+`Config.CONSENT_VERSIONS`에 동의 4종의 버전을 둔다. 동의 기록(`consents.version`)에 그대로 들어간다.

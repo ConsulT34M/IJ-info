@@ -26,6 +26,7 @@ KEY_SECRET_NAMES = (
     "ekyc/phone/otp-hmac-key",
     "ekyc/phone/inbox-key",
     "ekyc/phone/match-token-key",
+    "ekyc/admin-otp-key",
     "carrier/match-hmac-key",
     "carrier/rrn-key",
 )

@@ -74,6 +74,16 @@ def decrypt_str(key: str | bytes, blob: bytes, aad: bytes | None = None) -> str:
     return decrypt(key, blob, aad).decode("utf-8")
 
 
+def aad(table: str, column: str, row_id: object) -> bytes:
+    """암호문을 행에 묶는 AAD를 만든다(D17).
+
+    `테이블:컬럼:행 식별자` 형태다. 다른 행의 암호문을 복사해 넣으면 복호화가 실패한다.
+    """
+    if row_id in (None, ""):
+        raise ValueError("AAD에 넣을 행 식별자가 없다")
+    return f"{table}:{column}:{row_id}".encode("utf-8")
+
+
 def _key_bytes(key: str | bytes) -> bytes:
     """HMAC 키를 bytes로 맞춘다. 문자열은 UTF-8 바이트를 쓴다."""
     return key if isinstance(key, bytes) else str(key).encode("utf-8")
