@@ -561,3 +561,38 @@ W-05의 "짧은 유효기간의 서명 URL 또는 관리자 전용 라우트"를
   last_error_code와 `phone_events`·`access_logs`·`callbacks`를 **마스킹된 상태로** 출력.
   CI는 보관 여부만 보여준다.
 - `docs/DEMO.md` — 터미널 3개 띄우는 법과 시나리오별 "어디를 누르면 무엇이 보여야 정상인지" 표.
+
+---
+
+## 9단계 구현 세부
+
+## D80. `VULN_W17`은 "필터를 끄는" 것이 아니라 "필터가 없는 로거를 쓰는" 것이다
+
+마스킹 필터(`MaskingFilter`)는 `app.logger`와 `werkzeug` 로거에 걸려 있다.
+`VULN_W17`을 켜면 `log_mask.unmasked_logger()`가 돌려주는 **별도 로거(`ekyc.vuln`)**로
+인증번호·휴대폰번호 원문을 DEBUG로 남긴다. 그 로거에는 필터를 일부러 걸지 않았다.
+
+- 필터 자체는 그대로 동작한다(`test_w17_masking_filter_itself_still_works`로 확인).
+  같은 요청에서 `app.logger`에 남는 줄은 계속 마스킹된다.
+- 현실에서 흔한 형태(개발자가 디버깅용으로 별도 로거·print를 추가하는 것)와 같고,
+  "필터 설정을 껐다"보다 재현·진단이 자연스럽다.
+- 플래그가 꺼져 있으면 `unmasked_logger()`는 **호출되지 않는다**.
+
+## D81. 취약 플래그 테스트는 세 번째 케이스로 "경계"를 함께 고정한다
+
+플래그마다 양호/취약 한 쌍이 기본이고, 플래그가 **넘지 말아야 하는 선**이 있는 경우
+세 번째 테스트를 둔다.
+
+- `VULN_W09`: 켜도 `ci_matched IS TRUE`는 여전히 요구한다(D2 — W-09가 W-13까지 뚫지 않는다).
+  → `test_w09_still_requires_the_ci_match_when_enabled`
+- `VULN_W10`: 켜도 **HTML 화면은 계속 마스킹**된다. JSON API를 직접 호출해야 드러난다.
+  → `test_w10_html_list_stays_masked_either_way`
+- `VULN_C10`: **파기 배치(F-14)만** 바꾼다. 판정 즉시 파기는 그대로 객체를 지운다.
+  → `test_c10_judgement_time_purge_is_unaffected`
+- `VULN_W17`: 마스킹 필터 자체는 살아 있다. → `test_w17_masking_filter_itself_still_works`
+
+## D82. 플래그는 요청 시점에 `current_app.config`에서 읽는다
+
+6개 모두 기동 시 한 번 읽어 분기를 고정하지 않고, 매 요청·매 명령에서 읽는다.
+그래서 테스트가 `app.config["VULN_W08"] = True`만으로 취약 상태를 만들 수 있고
+(`enable_vuln` 픽스처), 진단 중 플래그를 바꿔도 앱만 다시 띄우면 된다.

@@ -422,7 +422,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (340개)
+├─ tests/                   pytest (358개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
@@ -464,7 +464,7 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 
 ## 현재 상태
 
-**1~8단계 완료. 전부 "양호" 기준으로 동작한다.**
+**1~9단계 완료. 기본값은 전부 "양호" 기준으로 동작한다.**
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
@@ -476,11 +476,14 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 | 6 | IA-09 최종 판정, IA-11 웹훅, IA-12, 결과 화면 | 완료 |
 | 7 | 실패 경로 전부(P01~P05·E01~E06·X01·만료·취소) + 동시 제출 | 완료 |
 | 8 | 관리자 콘솔, `access_logs`, `purge`·`expire` | 완료 |
-| 9 | **취약 플래그 6개**(`VULN_W08`·`W09`·`W10`·`W14`·`W17`·`C10`) + 플래그별 테스트 쌍 | **예정** |
+| 9 | 취약 플래그 6개(`VULN_W08`·`W09`·`W10`·`W14`·`W17`·`C10`) + 플래그별 테스트 쌍 | 완료 |
 
-- 지금은 **모든 `VULN_*` 플래그가 기본 False**이고, 그 상태에서 양호 통제가 동작하는 것을
-  테스트로 확인해 둔 상태다. 9단계에서 플래그를 켰을 때의 취약 동작과
-  "기본값에서는 막힌다 / 켜면 뚫린다" 테스트 쌍을 붙인다.
+- **모든 `VULN_*` 플래그는 기본 `False`** 다. 플래그마다 "기본값에서는 막힌다 / 켜면 뚫린다"
+  테스트 쌍이 있고(`tests/test_vuln_flags.py`), 넘지 말아야 하는 선도 함께 고정했다
+  (예: `VULN_W09`를 켜도 X-01 CI 대조 통과는 항상 요구한다).
+- 플래그를 켜는 방법은 `.env`에 `VULN_W08=true` 처럼 적는 것이다. 하나라도 켜져 있으면
+  기동 로그에 `취약 플래그가 켜져 있다(실습 전용): …` 경고가 찍힌다.
+  **진단 전에 이 줄로 상태를 확인한다.**
 - 서버·AWS 설정 영역의 취약(U-03, U-07, A-01, C-03 등)은 앱 코드 범위 밖이라
   나중에 `ops/apply_vuln.sh` · `ops/revert_vuln.sh`로 만든다.
 - **진단 범위**: 설정 점검이 기본이고, 설정만으로 판정할 수 없는 웹 항목은

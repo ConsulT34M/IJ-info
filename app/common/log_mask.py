@@ -130,3 +130,24 @@ def install_masking_filter(logger: logging.Logger) -> MaskingFilter:
     for handler in logger.handlers:
         handler.addFilter(masking)
     return masking
+
+
+# --- 실습용(VULN_W17): 마스킹을 거치지 않는 로거 -------------------------------
+
+VULN_LOGGER_NAME = "ekyc.vuln"
+
+
+def unmasked_logger() -> logging.Logger:
+    """마스킹 필터를 **일부러 걸지 않은** 로거.
+
+    VULN_W17이 켜진 경우에만 호출한다. app.logger와 다른 로거이므로 거기에 걸린
+    마스킹 필터가 적용되지 않는다 — 그게 이 플래그로 재현하려는 취약점이다.
+    기본값(플래그 False)에서는 이 함수가 호출되지 않는다.
+    """
+    logger = logging.getLogger(VULN_LOGGER_NAME)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("[%(asctime)s] DEBUG %(name)s: %(message)s"))
+        logger.addHandler(handler)  # 마스킹 필터를 걸지 않는다
+    logger.setLevel(logging.DEBUG)
+    return logger

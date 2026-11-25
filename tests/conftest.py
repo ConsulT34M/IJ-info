@@ -516,3 +516,17 @@ def admin_session(app, make_admin):
         return account
 
     return _login
+
+
+@pytest.fixture
+def enable_vuln(app):
+    """취약 플래그를 켠다. 켜기 전에 기본값이 False인지 함께 확인한다(9단계 테스트 쌍용)."""
+
+    def _enable(*flags: str):
+        for flag in flags:
+            assert flag in VULN_FLAGS, f"없는 플래그다: {flag}"
+            assert app.config[flag] is False, f"{flag} 기본값이 False가 아니다"
+            app.config[flag] = True
+        return app
+
+    return _enable

@@ -25,7 +25,7 @@ from app.common.crypto import aad, encrypt_str
 from app.common.face import get_face_matcher
 from app.common.client_ip import client_ip
 from app.common.crypto import sha256_hex
-from app.common.log_mask import mask_name, mask_phone
+from app.common.log_mask import mask_name, mask_phone, unmasked_logger
 from app.common import secrets as secret_store
 from app.common.phone import (
     code_mac,
@@ -770,6 +770,16 @@ def _issue_code(
     otp_row.inbox_ciphertext = encrypt_for_inbox(verification.id, code)
     test_phone.next_issue_at = issued_at + current_app.config["OTP_RESEND_INTERVAL"]
     log_phone_event(verification.id, event_kind)
+
+    if current_app.config.get("VULN_W17"):
+        # VULN_W17: 마스킹 필터를 거치지 않는 로거로 인증번호·번호 원문을 남긴다(실습 전용)
+        unmasked_logger().debug(
+            "otp issued verification_id=%s phone_number=%s code=%s",
+            verification.id,
+            number,
+            code,
+        )
+
     return otp_row
 
 
