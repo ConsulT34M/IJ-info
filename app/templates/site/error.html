@@ -1,0 +1,21 @@
+{% extends "site/base.html" %}
+{% block title %}{{ code }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="wrap">
+    <p class="crumb">홈 · 오류 {{ code }}</p>
+    <h1>{{ heading }}</h1>
+    <p>{{ message }}</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap">
+    <p class="hero-cta">
+      <a class="btn btn-main" href="{{ url_for('site.index') }}">홈으로</a>
+      <a class="btn btn-ghost" href="{{ url_for('site.support') }}">고객지원</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "site/base.html" %}
+{% block title %}비대면 본인확인{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">휴대폰 본인확인 · 신분증 진위확인 · 얼굴인증</span>
+      <h1>비대면 본인확인,<br><em>끊김 없이 안전하게</em></h1>
+      <p class="hero-lead">
+        인증정보평가는 금융·가상자산 사업자를 대신해 이용자의 신원을 확인한다.
+        휴대폰 명의 대조부터 신분증 진위확인, 얼굴 대조까지 한 번의 연동으로 처리한다.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-main" href="{{ url_for('site.services') }}">서비스 살펴보기</a>
+        <a class="btn btn-ghost" href="{{ url_for('site.support') }}">연동 문의하기</a>
+      </div>
+    </div>
+
+    <div class="flowcard">
+      <h2>본인확인은 이렇게 진행된다</h2>
+      <div class="flowstep">
+        <span class="flownum">1</span>
+        <span>
+          <b>휴대폰 본인확인</b>
+          <span>이동통신사 명의 대조 후 인증번호를 확인한다.</span>
+        </span>
+      </div>
+      <div class="flowstep">
+        <span class="flownum">2</span>
+        <span>
+          <b>신분증 진위확인</b>
+          <span>신분증 정보의 진위와 명의자 동일 여부를 확인한다.</span>
+        </span>
+      </div>
+      <div class="flowstep">
+        <span class="flownum">3</span>
+        <span>
+          <b>얼굴인증</b>
+          <span>신분증 사진과 얼굴 사진을 1:1로 대조한다.</span>
+        </span>
+      </div>
+      <div class="flowstep">
+        <span class="flownum">4</span>
+        <span>
+          <b>결과 통보</b>
+          <span>판정 결과만 사업자에게 전달하고 이미지는 즉시 파기한다.</span>
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">SERVICES</span>
+      <h2>세 가지 확인을 하나의 연동으로</h2>
+      <p>단계마다 통과 조건을 서버에서 다시 확인한다. 중간 단계를 건너뛸 수 없는 구조다.</p>
+    </div>
+    <div class="grid-3">
+      {% for service in services %}
+      <article class="card">
+        <div class="card-icon">{{ service.mark }}</div>
+        <h3>{{ service.name }}</h3>
+        <p>{{ service.summary }}</p>
+        <ul class="taglist">
+          {% for tag in service.tags %}<li>{{ tag }}</li>{% endfor %}
+        </ul>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section section-soft">
+  <div class="wrap">
+    <div class="stats">
+      {% for stat in stats %}
+      <div class="stat">
+        <b>{{ stat.value }}</b>
+        <span>{{ stat.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="crumb">위 수치는 실습용 가상 값이다.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <span class="kicker">NOTICE</span>
+        <h2>공지사항</h2>
+        <p>점검·규격 변경·약관 개정 안내를 올린다.</p>
+      </div>
+      <ul class="linklist">
+        {% for notice in notices %}
+        <li>
+          <a href="{{ url_for('site.notice_detail', no=notice.no) }}">
+            <span class="badge">{{ notice.category }}</span>
+            <span class="t">{{ notice.title }}</span>
+            <span class="d">{{ notice.published_on }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="hero-cta"><a class="btn btn-ghost btn-sm" href="{{ url_for('site.notices') }}">전체 보기</a></p>
+    </div>
+
+    <div>
+      <div class="section-head">
+        <span class="kicker">SECURITY</span>
+        <h2>개인정보는 남기지 않는 것이 원칙이다</h2>
+        <p>필요한 범위만 받고, 목적이 끝나면 지운다.</p>
+      </div>
+      <table class="table-plain">
+        <tbody>
+          <tr><th>신분증·얼굴 이미지</th><td>판정 완료 즉시 파기</td></tr>
+          <tr><th>연계정보(CI)</th><td>사업자 전달 후 7일, 미전달 시 판정 후 30일</td></tr>
+          <tr><th>휴대폰번호</th><td>원문 미보관. 해시로만 처리하고 화면에는 마스킹 표기</td></tr>
+          <tr><th>주민등록번호</th><td>암호화 보관, 화면·목록에서는 마스킹 표기</td></tr>
+          <tr><th>서버 간 통신</th><td>TLS, 요청 서명 검증, 위탁사별 허용 IP 제한</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

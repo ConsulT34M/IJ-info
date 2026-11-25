@@ -1,0 +1,47 @@
+{% extends "site/base.html" %}
+{% block title %}{{ notice.title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="wrap">
+    <p class="crumb">홈 · 공지사항 · {{ notice.category }}</p>
+    <h1>{{ notice.title }}</h1>
+    <p class="notice-meta">
+      <span class="badge">{{ notice.category }}</span>
+      <span>{{ notice.published_on }}</span>
+      <span>공지번호 {{ notice.no }}</span>
+    </p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap">
+    <div class="prose notice-body">
+      {% for paragraph in notice.body %}
+      <p>{{ paragraph }}</p>
+      {% endfor %}
+    </div>
+
+    <table class="table-plain notice-body">
+      <tbody>
+        <tr>
+          <th>이전 글</th>
+          <td>
+            {% if newer %}<a href="{{ url_for('site.notice_detail', no=newer.no) }}">{{ newer.title }}</a>
+            {% else %}없다{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <th>다음 글</th>
+          <td>
+            {% if older %}<a href="{{ url_for('site.notice_detail', no=older.no) }}">{{ older.title }}</a>
+            {% else %}없다{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="hero-cta"><a class="btn btn-ghost btn-sm" href="{{ url_for('site.notices') }}">목록으로</a></p>
+  </div>
+</section>
+{% endblock %}

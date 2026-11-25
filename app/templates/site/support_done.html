@@ -1,0 +1,32 @@
+{% extends "site/base.html" %}
+{% block title %}문의 접수 완료{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="wrap">
+    <p class="crumb">홈 · 고객지원 · 접수 완료</p>
+    <h1>문의가 접수됐다</h1>
+    <p>접수번호를 확인하고, 담당자 연락 시 알려준다.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap">
+    <div class="receipt">
+      <p class="crumb">접수번호</p>
+      <p><b>{{ receipt_no }}</b></p>
+      <table class="table-plain">
+        <tbody>
+          <tr><th>문의 유형</th><td>{{ kind }}</td></tr>
+          <tr><th>처리 예정</th><td>영업일 기준 2일 이내 회신</td></tr>
+        </tbody>
+      </table>
+      <p class="hint">실습 환경이므로 문의 내용은 저장하지 않는다. 접수번호도 조회할 수 없다.</p>
+    </div>
+    <p class="hero-cta">
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('site.support') }}">고객지원으로</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('site.index') }}">홈으로</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

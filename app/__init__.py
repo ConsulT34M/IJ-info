@@ -118,6 +118,7 @@ def _register_blueprints(app: Flask) -> None:
     """Blueprint 등록. api는 HMAC 서명으로 보호하므로 CSRF를 면제한다."""
     from app.admin import bp as admin_bp
     from app.api import bp as api_bp
+    from app.site import bp as site_bp
     from app.test_inbox import bp as test_inbox_bp
     from app.verify import bp as verify_bp
 
@@ -126,9 +127,20 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(verify_bp)
     app.register_blueprint(test_inbox_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(site_bp)  # 공개 회사 홈페이지. 마지막에 등록해 '/'를 잡는다
 
 
 # 이용자에게 보여줄 오류 문구. 내부 사정은 드러내지 않는다.
+# 공개 홈페이지(site)용 오류 문구. 인증창 문구와 말투가 다르다.
+SITE_ERROR_MESSAGES = {
+    400: ("잘못된 요청이다", "입력값을 확인하고 다시 시도한다."),
+    403: ("접근할 수 없다", "권한이 없는 요청이다."),
+    404: ("페이지를 찾을 수 없다", "주소가 바뀌었거나 삭제된 페이지다. 홈에서 다시 찾아본다."),
+    405: ("허용되지 않은 방식이다", "올바른 경로로 다시 요청한다."),
+    429: ("요청이 너무 많다", "잠시 후 다시 시도한다."),
+    500: ("일시적인 오류가 생겼다", "잠시 후 다시 시도한다. 계속되면 고객지원으로 알려준다."),
+}
+
 ERROR_MESSAGES = {
     400: "입력값을 확인한다.",
     401: "인증에 실패했다.",
@@ -152,6 +164,17 @@ def _register_error_handlers(app: Flask) -> None:
         message = exc.description if _has_custom_description(exc) else ERROR_MESSAGES.get(code, exc.name)
         if request.blueprint == "api" or request.path.startswith("/api/"):
             return jsonify(error=exc.name, code=code, message=message), code
+        if request.blueprint in (None, "site"):
+            # 공개 홈페이지와 없는 주소는 회사 사이트 모양으로 돌려준다(D83)
+            heading, site_message = SITE_ERROR_MESSAGES.get(
+                code, ("요청을 처리할 수 없다", message)
+            )
+            return (
+                render_template(
+                    "site/error.html", code=code, heading=heading, message=site_message
+                ),
+                code,
+            )
         return render_template("error.html", code=code, message=message), code
 
 

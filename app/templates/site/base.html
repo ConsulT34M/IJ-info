@@ -1,0 +1,94 @@
+{#- 회사 홈페이지 공통 레이아웃. CSP가 inline style·script를 막으므로
+    style 속성과 <script>를 쓰지 않는다. 모바일 메뉴는 CSS만으로 연다. -#}
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="{% block description %}비대면 본인확인·신분증 진위확인·얼굴인증(eKYC) 서비스를 제공하는 (주)인증정보평가입니다.{% endblock %}">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}{% endblock %} · (주)인증정보평가</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='site/logo-mark.svg') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='site/site.css') }}">
+</head>
+<body>
+<a class="skip" href="#main">본문으로 바로가기</a>
+
+<div class="labbar">
+  <div class="wrap">
+    <strong>실습용 가상 사이트</strong> ·
+    실제로 존재하는 회사가 아니며, 보안 진단 실습을 위해 만든 격리 환경이다.
+    실제 개인정보를 입력하지 않는다.
+  </div>
+</div>
+
+<header class="site-head">
+  <div class="wrap">
+    <a class="brand" href="{{ url_for('site.index') }}">
+      <img src="{{ url_for('static', filename='site/logo-mark.svg') }}" alt="">
+      <span class="brand-text">
+        <span class="brand-name">인증정보평가</span>
+        <span class="brand-sub">IJ-INFO</span>
+      </span>
+    </a>
+
+    <input class="nav-toggle" type="checkbox" id="nav-toggle" aria-label="메뉴 열기">
+    <label class="nav-burger" for="nav-toggle"><span></span><span></span><span></span></label>
+
+    <nav class="nav" aria-label="주요 메뉴">
+      <a href="{{ url_for('site.about') }}" class="{{ 'on' if active == 'about' }}">회사소개</a>
+      <a href="{{ url_for('site.services') }}" class="{{ 'on' if active == 'services' }}">서비스</a>
+      <a href="{{ url_for('site.notices') }}" class="{{ 'on' if active == 'notices' }}">공지사항</a>
+      <a href="{{ url_for('site.support') }}" class="{{ 'on' if active == 'support' }}">고객지원</a>
+      <a href="{{ url_for('site.demo') }}" class="{{ 'on' if active == 'demo' }}">실습 안내</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <div class="foot-brand">
+          <img src="{{ url_for('static', filename='site/logo-mark.svg') }}" alt="">
+          <span>인증정보평가</span>
+        </div>
+        <p class="foot-meta">
+          주식회사 인증정보평가 (IJ-info Co., Ltd.)<br>
+          대표이사 홍길동 · 사업자등록번호 000-00-00000 (가상)<br>
+          서울특별시 ○○구 ○○대로 00, 00층 (실습용 가상 주소)
+        </p>
+      </div>
+      <div>
+        <h4>바로가기</h4>
+        <ul class="foot-links">
+          <li><a href="{{ url_for('site.about') }}">회사소개</a></li>
+          <li><a href="{{ url_for('site.services') }}">서비스</a></li>
+          <li><a href="{{ url_for('site.notices') }}">공지사항</a></li>
+          <li><a href="{{ url_for('site.privacy') }}">개인정보 처리방침</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>고객지원</h4>
+        <ul class="foot-links">
+          <li>대표번호 02-0000-0000 (가상)</li>
+          <li>평일 09:00 ~ 18:00</li>
+          <li><a href="{{ url_for('site.support') }}">문의 남기기</a></li>
+          <li><a href="{{ url_for('admin.login') }}">임직원 로그인</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 주식회사 인증정보평가. 실습용 가상 사이트.</span>
+      <span>SK쉴더스 루키즈 최종 프로젝트 · 개인정보 처리 수탁사 점검 컨설팅</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

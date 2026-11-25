@@ -278,6 +278,29 @@ $env:EKYC_API_KEY = "..."; $env:EKYC_HMAC_SECRET = "..."
 
 ---
 
+## 진단 대상 화면
+
+`flask run` 하나로 아래가 전부 뜬다. 모두 `127.0.0.1:8000`이다.
+
+| 구분 | 주소 | 들어가는 방법 |
+|---|---|---|
+| **회사 홈페이지** (공개) | `/` | 바로 열린다 |
+| 공지사항 | `/notices`, `/notices/<번호>` | 검색어(`?q=`)·페이지(`?page=`) 파라미터가 있다 |
+| 고객지원·문의 폼 | `/support` | CSRF 토큰이 있는 POST 폼 |
+| 개인정보 처리방침 | `/privacy` | 구현된 보유기간·안전조치와 내용을 맞췄다 |
+| 실습 안내 | `/demo` | 진단 대상 목록과 시작 방법 |
+| 인증창 | `/verify/…` | **직접 못 연다.** 위탁사의 IA-01 요청으로 받은 1회용 주소로만 (`tools/fake_exchange.py request`) |
+| 관리자 콘솔 | `/admin/login` | `flask create-admin`으로 만든 계정 + TOTP |
+| 서버 간 API | `/api/v1/…` | `X-Api-Key` + `X-Timestamp` + `X-Signature` |
+| 테스트 문자 수신함 | `/test-inbox/` | 실습 전용. **진단 범위에서 제외**한다 |
+
+회사 홈페이지는 **공개 노출면**이다. 개인정보를 다루지 않고 DB도 쓰지 않으며,
+공지·FAQ는 `app/site/content.py`의 고정 데이터다(D83). 문의 내용은 저장하지 않고
+접수번호만 돌려준다(D84). 회사·대표자·주소·실적 수치는 **전부 가상**이고,
+모든 화면 최상단에 그 사실을 띄운다.
+
+---
+
 ## 시나리오별 확인표
 
 성공 경로, 실패 코드 14종(P01~P05 · E01~E06 · X01), 관리자 콘솔, 파기 배치까지
@@ -408,6 +431,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ```
 .
 ├─ app/                     A사 Flask 앱
+│  ├─ site/                 회사 홈페이지(공개 화면) — 소개·공지·고객지원·처리방침
 │  ├─ api/                  IA-01, IA-12, 웹훅 전송(IA-11)
 │  ├─ verify/               인증창 IA-02~IA-10, 건 종결
 │  ├─ test_inbox/           IA-05 테스트 문자 수신함 (실습 전용, 진단 범위 제외)
@@ -422,7 +446,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (358개)
+├─ tests/                   pytest (406개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
@@ -477,6 +501,7 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 | 7 | 실패 경로 전부(P01~P05·E01~E06·X01·만료·취소) + 동시 제출 | 완료 |
 | 8 | 관리자 콘솔, `access_logs`, `purge`·`expire` | 완료 |
 | 9 | 취약 플래그 6개(`VULN_W08`·`W09`·`W10`·`W14`·`W17`·`C10`) + 플래그별 테스트 쌍 | 완료 |
+| + | 회사 홈페이지(공개 화면) — 진단용 공개 노출면 | 완료 |
 
 - **모든 `VULN_*` 플래그는 기본 `False`** 다. 플래그마다 "기본값에서는 막힌다 / 켜면 뚫린다"
   테스트 쌍이 있고(`tests/test_vuln_flags.py`), 넘지 말아야 하는 선도 함께 고정했다

@@ -1,0 +1,93 @@
+{% extends "site/base.html" %}
+{% block title %}고객지원{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="wrap">
+    <p class="crumb">홈 · 고객지원</p>
+    <h1>고객지원</h1>
+    <p>자주 묻는 질문을 먼저 확인하고, 해결되지 않으면 문의를 남긴다.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap grid-2">
+    <div>
+      <div class="section-head">
+        <span class="kicker">FAQ</span>
+        <h2>자주 묻는 질문</h2>
+      </div>
+      <div class="faq">
+        {% for question, answer in faqs %}
+        <details>
+          <summary>{{ question }}</summary>
+          <p>{{ answer }}</p>
+        </details>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <div class="section-head">
+        <span class="kicker">CONTACT</span>
+        <h2>연락처</h2>
+      </div>
+      <table class="table-plain">
+        <tbody>
+          <tr><th>대표번호</th><td>02-0000-0000 (가상)</td></tr>
+          <tr><th>운영시간</th><td>평일 09:00 ~ 18:00<br>점심 12:00 ~ 13:00, 주말·공휴일 휴무</td></tr>
+          <tr><th>장애 신고</th><td>24시간 접수</td></tr>
+          <tr><th>개인정보 관련</th><td><a href="{{ url_for('site.privacy') }}">개인정보 처리방침</a> 참고</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section section-soft">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">INQUIRY</span>
+      <h2>문의 남기기</h2>
+      <p>접수 후 영업일 기준 2일 안에 담당자가 연락한다. 실습 환경이므로 문의 내용은 저장하지 않고 접수번호만 돌려준다.</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-bad">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('site.support_submit') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-grid">
+        <div class="field">
+          <label for="kind">문의 유형</label>
+          <select id="kind" name="kind" required>
+            <option value="">선택한다</option>
+            {% for kind in kinds %}
+            <option value="{{ kind }}" {{ 'selected' if form.get('kind') == kind }}>{{ kind }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="company">회사명</label>
+          <input type="text" id="company" name="company" maxlength="80" value="{{ form.get('company', '') }}" required>
+        </div>
+        <div class="field">
+          <label for="manager">담당자명</label>
+          <input type="text" id="manager" name="manager" maxlength="40" value="{{ form.get('manager', '') }}" required>
+        </div>
+        <div class="field">
+          <label for="email">이메일</label>
+          <input type="email" id="email" name="email" maxlength="120" value="{{ form.get('email', '') }}" required>
+        </div>
+        <div class="field field-wide">
+          <label for="message">문의 내용</label>
+          <textarea id="message" name="message" maxlength="2000" required>{{ form.get('message', '') }}</textarea>
+          <span class="hint">주민등록번호·인증번호 같은 개인정보는 적지 않는다. 10자 이상 2,000자 이내로 입력한다.</span>
+        </div>
+      </div>
+      <p class="hero-cta"><button class="btn btn-main" type="submit">문의 접수</button></p>
+    </form>
+  </div>
+</section>
+{% endblock %}

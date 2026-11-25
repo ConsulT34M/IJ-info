@@ -1,0 +1,59 @@
+{% extends "site/base.html" %}
+{% block title %}공지사항{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="wrap">
+    <p class="crumb">홈 · 공지사항</p>
+    <h1>공지사항</h1>
+    <p>서비스 점검, 연동 규격 변경, 약관·처리방침 개정을 안내한다.</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="wrap">
+    <form class="searchbar" method="get" action="{{ url_for('site.notices') }}">
+      <input type="text" name="q" value="{{ keyword }}" placeholder="제목·내용 검색" maxlength="60" aria-label="공지사항 검색">
+      <button class="btn btn-ghost btn-sm" type="submit">검색</button>
+      {% if keyword %}
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('site.notices') }}">초기화</a>
+      {% endif %}
+    </form>
+
+    {% if keyword %}
+    <p class="crumb">&ldquo;{{ keyword }}&rdquo; 검색 결과 {{ total }}건</p>
+    {% else %}
+    <p class="crumb">전체 {{ total }}건</p>
+    {% endif %}
+
+    {% if notices %}
+    <ul class="linklist">
+      {% for notice in notices %}
+      <li>
+        <a href="{{ url_for('site.notice_detail', no=notice.no) }}">
+          <span class="badge">{{ notice.category }}</span>
+          <span class="t">{{ notice.title }}</span>
+          <span class="d">{{ notice.published_on }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% if pages > 1 %}
+    <nav class="pager" aria-label="페이지">
+      {% for number in range(1, pages + 1) %}
+        {% if number == page %}
+        <span class="on">{{ number }}</span>
+        {% else %}
+        <a href="{{ url_for('site.notices', q=keyword or none, page=number) }}">{{ number }}</a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <p class="empty">검색 결과가 없다. 다른 검색어로 찾아본다.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
