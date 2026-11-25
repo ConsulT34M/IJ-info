@@ -1,4 +1,4 @@
-"""MC-01 명의 대조, MC-02 CI 발급."""
+"""MC-01 명의 대조, MC-02 CI 발급, MC-03 본인확인 앱 기기 등록용 명의 확인."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from app.common import secrets as secret_store
 from app.common.ci import ci_mock
 from app.common.crypto import decrypt_str, hmac_sha256_hex, sha256_hex
 from app.common.log_mask import mask_name, mask_phone
+from app.common.rrn import birth_date_from_rrn
 from app.common.timeutil import is_expired, kst_isoformat, now_utc
 from carrier.models import CarrierClient, MatchSession, Subscriber, db
 
@@ -19,6 +20,8 @@ bp = Blueprint("carrier", __name__, url_prefix="/carrier/v1")
 # MC-01이 돌려주는 내부용 사유 (D1). A사는 기본(양호)에서 둘을 P01 하나로 합친다.
 REASON_NAME_MISMATCH = "NAME_MISMATCH"
 REASON_NOT_SUBSCRIBER = "NOT_SUBSCRIBER"
+# MC-03에서만 쓰는 사유. 기기 등록은 생년월일까지 본다.
+REASON_BIRTH_MISMATCH = "BIRTH_MISMATCH"
 
 
 def normalize_phone(value: object) -> str | None:
@@ -154,6 +157,53 @@ def ci_issuances():
     )
     current_app.logger.info("MC-02 CI 발급: verification_id=%s", verification_id)
     return jsonify(ci=ci_mock(rrn, secret_store.get_key("carrier/ci-key"))), 200
+
+
+@bp.post("/device-registrations")
+@require_carrier_client
+def device_registrations():
+    """MC-03. 본인확인 앱(PASS) 기기 등록 전 명의 확인.
+
+    실제 PASS 앱을 깔 때 하는 "통신사 명의 인증"에 해당한다. MC-01과 달리
+    생년월일까지 보고, 대조 토큰은 주지 않는다. CI 발급으로 이어지지 않는다(D85).
+    """
+    payload = _json_body()
+    name = payload.get("name")
+    phone = normalize_phone(payload.get("phone_number"))
+    birth_date = payload.get("birth_date")
+
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 50:
+        abort(400, description="name이 필요하다.")
+    if phone is None:
+        abort(400, description="phone_number 형식이 올바르지 않다.")
+    if not isinstance(birth_date, str) or len(birth_date.strip()) != 10:
+        abort(400, description="birth_date는 YYYY-MM-DD 형식이다.")
+
+    subscriber_key = secret_store.get_key("carrier/subscriber-key")
+    subscriber = db.session.scalars(
+        db.select(Subscriber).filter_by(phone_key=hmac_sha256_hex(subscriber_key, phone))
+    ).one_or_none()
+
+    if subscriber is None:
+        current_app.logger.info("MC-03 미등록 번호: phone=%s", mask_phone(phone))
+        return jsonify(matched=False, reason=REASON_NOT_SUBSCRIBER), 200
+
+    if subscriber.name_mac != hmac_sha256_hex(subscriber_key, name.strip()):
+        current_app.logger.info("MC-03 명의 불일치: name=%s", mask_name(name))
+        return jsonify(matched=False, reason=REASON_NAME_MISMATCH), 200
+
+    rrn = decrypt_str(
+        secret_store.get_key("carrier/rrn-key"),
+        subscriber.rrn_ciphertext,
+        _subscriber_aad(subscriber.subscriber_ref),
+    )
+    registered_birth = birth_date_from_rrn(rrn)
+    if registered_birth is None or registered_birth.isoformat() != birth_date.strip():
+        current_app.logger.info("MC-03 생년월일 불일치: phone=%s", mask_phone(phone))
+        return jsonify(matched=False, reason=REASON_BIRTH_MISMATCH), 200
+
+    current_app.logger.info("MC-03 기기 등록 명의 확인: phone=%s", mask_phone(phone))
+    return jsonify(matched=True, reason=None, phone_mask=mask_phone(phone)), 200
 
 
 def _subscriber_aad(subscriber_ref: str) -> bytes:

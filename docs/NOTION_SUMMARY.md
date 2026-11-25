@@ -43,6 +43,14 @@
 - MC-01은 내부용 `reason`(`NAME_MISMATCH` / `NOT_SUBSCRIBER`)을 돌려주고, A사가 기본값에서 P01로 합친다. (D1)
 - MC-02의 토큰 거부는 사유를 구분하지 않고 **모두 409**다(없음·사용됨·만료·다른 건의 토큰). (D50)
 
+### MC-03 (모의 통신사, 신규)
+
+- `POST /carrier/v1/device-registrations` 추가. 본인확인 앱(PASS) 기기 등록 전 명의 확인이다.
+  요청 `{phone_number, name, birth_date}`, 응답 `{matched, reason}`.
+- MC-01과 다른 점: **생년월일까지 대조**하고 **대조 토큰을 주지 않는다**. CI 발급으로 이어지지 않는다.
+- A사 쪽 짝은 `POST /test-inbox/devices`(실습 전용). 통과하면 수신함 키를 새로 발급하고
+  번호당 기기 하나만 유효하게 둔다. (D85)
+
 ### IA-09 / IA-12
 - IA-09 성공은 `/verify/result`(결과 화면)로 보내고 그 화면의 버튼으로 `return_url`로 돌아간다.
   그 외 종결(취소·P01~P05·E06·X01)은 `return_url`로 바로 보낸다. (D64)

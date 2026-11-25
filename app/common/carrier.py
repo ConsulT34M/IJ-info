@@ -1,4 +1,4 @@
-"""모의 통신사 호출 (MC-01, MC-02).
+"""모의 통신사 호출 (MC-01, MC-02, MC-03).
 
 TLS + 인증서 고정(W-15): 시스템 신뢰 저장소가 아니라 통신사 인증서 파일만 신뢰한다.
 응답 없음·오류는 CarrierError로 올리고, 호출부가 P05로 종결한 뒤 503을 돌려준다.
@@ -16,6 +16,7 @@ from app.common import secrets as secret_store
 
 REASON_NAME_MISMATCH = "NAME_MISMATCH"
 REASON_NOT_SUBSCRIBER = "NOT_SUBSCRIBER"
+REASON_BIRTH_MISMATCH = "BIRTH_MISMATCH"
 
 
 class CarrierError(RuntimeError):
@@ -100,3 +101,18 @@ def issue_ci(verification_id, match_token: str) -> str:
     if not isinstance(ci, str) or len(ci) != 88:
         raise CarrierError("MC-02 응답의 CI 형식이 올바르지 않다")
     return ci
+
+
+def register_device(name: str, phone_number: str, birth_date: str) -> MatchResult:
+    """MC-03. 본인확인 앱 기기 등록 전 명의 확인. 대조 토큰은 받지 않는다(D85)."""
+    response = _post(
+        "/carrier/v1/device-registrations",
+        {"name": name, "phone_number": phone_number, "birth_date": birth_date},
+    )
+    if response.status_code != 200:
+        raise CarrierError(f"MC-03 응답 코드 {response.status_code}")
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise CarrierError("MC-03 응답이 JSON이 아니다") from exc
+    return MatchResult(matched=bool(body.get("matched")), reason=body.get("reason"))

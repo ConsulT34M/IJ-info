@@ -160,6 +160,11 @@ cat <<EOF
 [가짜 거래소]
   source instance/fake_exchange.env   # EKYC_API_KEY / EKYC_HMAC_SECRET
 
+[모의 PASS 앱]  인증번호를 받는 자리다. 수신함 키를 복붙하지 않는다.
+  .venv/bin/python tools/pass_app.py register   # 번호·성명·생년월일을 물어본다
+  .venv/bin/python tools/pass_app.py watch      # 문자가 오면 화면에 뜬다
+  기기 등록은 초기화할 때마다 다시 한다(수신함 키가 seed 값으로 돌아간다).
+
 다음: docs/DEMO.md 의 "터미널 3개" 대로 띄운다.
 ────────────────────────────────────────────────────────────────────────
 EOF

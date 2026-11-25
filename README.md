@@ -77,8 +77,18 @@ source instance/fake_exchange.env
 ```
 
 1. 동의 4종 체크 → 성명·휴대폰번호 입력 (가상 인물 값은 아래 명령으로 본다)
-2. 실습 환경이라 문자가 오지 않는다 → **테스트 문자 수신함** <http://127.0.0.1:8000/test-inbox/> 에
-   그 인물의 `inbox_key`를 넣어 인증번호를 꺼낸다
+2. 실습 환경이라 문자가 오지 않는다 → **모의 PASS 앱**으로 받는다. 터미널 하나를 더 열고:
+
+   ```bash
+   # 처음 한 번: 통신사에 명의를 확인받고 기기를 등록한다 (PASS 앱 설치와 같다)
+   .venv/bin/python tools/pass_app.py register --phone 010... --name 홍길동 --birth 1990-01-01
+   # 그 뒤로는 문자가 오면 화면에 뜬다
+   .venv/bin/python tools/pass_app.py watch
+   ```
+
+   번호·성명·생년월일이 통신사 명부와 **전부** 맞아야 등록된다. 등록하면 수신함 키가
+   `instance/pass_device.json`(권한 600)에 저장되고, 화면에는 찍히지 않는다.
+   브라우저로 <http://127.0.0.1:8000/test-inbox/> 에 `inbox_key`를 직접 넣는 기존 방법도 된다.
 3. 신분증 사진으로 `samples/images/id_card.png` 업로드 → 주민번호·발급일자 입력
 4. 얼굴 사진으로 `samples/images/selfie.png` 업로드 → "본인확인이 완료됐다"
 5. 터미널 ③에 `status: SUCCEEDED` 웹훅이 서명 검증과 함께 찍힌다
@@ -292,7 +302,7 @@ $env:EKYC_API_KEY = "..."; $env:EKYC_HMAC_SECRET = "..."
 | 인증창 | `/verify/…` | **직접 못 연다.** 위탁사의 IA-01 요청으로 받은 1회용 주소로만 (`tools/fake_exchange.py request`) |
 | 관리자 콘솔 | `/admin/login` | `flask create-admin`으로 만든 계정 + TOTP |
 | 서버 간 API | `/api/v1/…` | `X-Api-Key` + `X-Timestamp` + `X-Signature` |
-| 테스트 문자 수신함 | `/test-inbox/` | 실습 전용. **진단 범위에서 제외**한다 |
+| 테스트 문자 수신함 | `/test-inbox/` | 실습 전용. **진단 범위에서 제외**한다. `tools/pass_app.py`(모의 PASS 앱)가 기기 등록으로 수신함 키를 받는다 |
 
 회사 홈페이지는 **공개 노출면**이다. 개인정보를 다루지 않고 DB도 쓰지 않으며,
 공지·FAQ는 `app/site/content.py`의 고정 데이터다(D83). 문의 내용은 저장하지 않고
@@ -445,8 +455,8 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ migrations/              Alembic 마이그레이션
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
-├─ tools/                   demo_reset.sh · fake_exchange.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (406개)
+├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
+├─ tests/                   pytest (426개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
