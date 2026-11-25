@@ -55,8 +55,10 @@ cp .env.example .env
 bash tools/demo_reset.sh
 ```
 
-DB 초기화 → 마이그레이션 → 시크릿·대장·수신함 적재 → 모의 통신사 인증서·명부 →
-가짜 거래소 고객사 등록 → 관리자 2명(admin1 / auditor1) 생성 → 샘플 이미지까지 한 번에 한다.
+웹서버 인증서 생성 → 컨테이너 기동(Apache·Gunicorn·PostgreSQL) → DB 초기화 → 마이그레이션 →
+시크릿·대장·수신함·자료실 적재 → 모의 통신사 인증서·명부 → 가짜 거래소 고객사 등록 →
+관리자 2명(admin1 / auditor1) 생성 → 샘플 이미지까지 한 번에 한다.
+**끝나면 <https://localhost:9443> 이 이미 떠 있다.**
 API Key·HMAC Secret은 `instance/fake_exchange.env`, 관리자 비밀번호·TOTP 시크릿은
 `instance/demo_admins.env`에 **권한 600으로** 저장된다(둘 다 커밋되지 않는다).
 
@@ -65,7 +67,7 @@ API Key·HMAC Secret은 `instance/fake_exchange.env`, 관리자 비밀번호·TO
 | 터미널 | 명령 | 띄우는 것 |
 |---|---|---|
 | ① 모의 통신사 | `.venv/bin/python -m carrier` | `https://localhost:8443` (자체 서명 TLS) |
-| ② A사 앱 | `FLASK_APP=app .venv/bin/flask run` | `http://127.0.0.1:8000` |
+| ② A사 앱 | (컨테이너가 이미 띄움) 또는 `FLASK_APP=app .venv/bin/flask run` | `https://localhost:9443` / `http://127.0.0.1:8000` |
 | ③ 가짜 거래소 | `source instance/fake_exchange.env && .venv/bin/python tools/fake_exchange.py serve` | `http://127.0.0.1:9000/callback` (웹훅 수신) |
 
 ### 3) 인증 한 바퀴 돌려 보기
@@ -336,7 +338,8 @@ git diff ops/apache/active.conf   # 지금 어느 상태인지
 
 ## 진단 대상 화면
 
-`flask run` 하나로 아래가 전부 뜬다. 모두 `127.0.0.1:8000`이다.
+아래가 전부 같은 앱이다. **진단은 운영 형태(`https://localhost:9443`, Apache 뒤)에서 한다.**
+코드를 고치며 볼 때는 `flask run`(`http://127.0.0.1:8000`)이 편하다.
 
 | 구분 | 주소 | 들어가는 방법 |
 |---|---|---|
@@ -351,9 +354,9 @@ git diff ops/apache/active.conf   # 지금 어느 상태인지
 | 서버 간 API | `/api/v1/…` | `X-Api-Key` + `X-Timestamp` + `X-Signature` |
 | 테스트 문자 수신함 | `/test-inbox/` | 실습 전용. **진단 범위에서 제외**한다. `tools/pass_app.py`(모의 PASS 앱)가 기기 등록으로 수신함 키를 받는다 |
 
-회사 홈페이지는 **공개 노출면**이다. 개인정보를 다루지 않고 DB도 쓰지 않으며,
-공지·FAQ는 `app/site/content.py`의 고정 데이터다(D83). 문의 내용은 저장하지 않고
-접수번호만 돌려준다(D84). 회사·대표자·주소·실적 수치는 **전부 가상**이고,
+회사 홈페이지는 **공개 노출면**이다. 공지·FAQ는 `app/site/content.py`의 고정 데이터이고(D83),
+자료실과 문의는 전용 표 두 개(`site_documents`·`site_inquiries`)를 쓴다(D90). 문의는 담당자
+연락처 수준만 받으며 **개인정보 흐름에는 들어가지 않는다.** 회사·대표자·주소·연락처는 **전부 가상**이고,
 모든 화면 최상단에 그 사실을 띄운다.
 
 ---
@@ -534,14 +537,14 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 │  ├─ admin/                관리자 콘솔(로그인·이력·이미지 열람·접속기록·권한)
 │  ├─ common/               서명·CI·주민번호·암복호화·마스킹·stage·저장소·얼굴 대조 등
 │  ├─ config.py             9장 설정값 + 취약 플래그(VULN_*, 기본 전부 False)
-│  ├─ models.py             13개 테이블
+│  ├─ models.py             13개 테이블 + 홈페이지 2개(자료실·문의)
 │  └─ cli.py                flask seed / create-client / create-admin / purge / expire
 ├─ carrier/                 모의 통신사: 별도 Flask 앱 + SQLite + 자체 서명 TLS(8443)
 ├─ migrations/              Alembic 마이그레이션
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개 + 자료실 공개 문서)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (491개)
+├─ tests/                   pytest (495개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
@@ -575,9 +578,11 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | **기준 명세.** 16단계 흐름, stage 규칙, API, 데이터 모델 13개, 판정 사유 코드, 양호 통제와 취약 플래그 |
 | [docs/DEMO.md](docs/DEMO.md) | 시연·확인 절차와 시나리오별 정상 결과표 |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 설계 결정 기록(D1~D79). 맨 위 0절이 **거래소와 합의할 계약**(서명 규칙·응답 코드·웹훅 형식) |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 설계 결정 기록(D1~D92). 맨 위 0절이 **거래소와 합의할 계약**(서명 규칙·응답 코드·웹훅 형식, 연동 방식 두 가지) |
 | [docs/NOTION_SUMMARY.md](docs/NOTION_SUMMARY.md) | **노션 반영 요약.** 구현하면서 명세를 바꾼 결정만 노션 문서별(API 명세 / DB 설계 / 요구사항·기능 / 구성도)로 묶은 것 |
 | [samples/README.md](samples/README.md) | 샘플 데이터 설명(전부 가상) |
+| [ops/apache/ekyc-good.conf](ops/apache/ekyc-good.conf) | 웹서버 **양호** 설정. 지시어마다 어떤 점검 항목인지 주석으로 적었다 |
+| [ops/apache/ekyc-vuln.conf](ops/apache/ekyc-vuln.conf) | 웹서버 **의도된 취약** 설정. 양호본과 diff를 뜨면 차이가 바로 보인다 |
 
 ---
 
@@ -598,6 +603,8 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 | 9 | 취약 플래그 6개(`VULN_W08`·`W09`·`W10`·`W14`·`W17`·`C10`) + 플래그별 테스트 쌍 | 완료 |
 | + | 회사 홈페이지(공개 화면) — 진단용 공개 노출면 | 완료 |
 | + | IA-21·22 — 위탁사가 화면을 만드는 서버 간 경로(`mode: DIRECT`) | 완료 |
+| + | 자료실·문의 저장 + 웹 점검용 플래그 3개(`W01`·`W02`·`W05`) | 완료 |
+| + | 운영 형태 스택 — Apache 2.4 → Gunicorn → Flask, 웹서버 양호/취약 전환 | 완료 |
 
 - 플래그는 **9개**다. 14장의 6개(`W08`·`W09`·`W10`·`W14`·`W17`·`C10`)에 더해,
   홈페이지 자료실·문의에서 웹 점검 항목을 재현하는 3개가 있다(D90):
