@@ -1,96 +1,322 @@
-# A사 비대면 본인확인 대행 (실습용)
+# IJ-info
+수탁사 : (주)인증정보평가
 
-SK쉴더스 루키즈 보안컨설팅 트랙 최종 프로젝트. 위탁사(가상자산 거래소)의 비대면 본인확인을
-대행하는 수탁사 A사 시스템이다. 금융보안원 금융분야 취약점 분석·평가 기준 + ISMS-P로
-**설정 점검 수준**의 진단을 하기 위해 만든다.
+---
 
-- 기준 명세: [CLAUDE.md](CLAUDE.md)
-- 설계 결정 기록: [docs/DECISIONS.md](docs/DECISIONS.md)
-- 노션 반영 요약: [docs/NOTION_SUMMARY.md](docs/NOTION_SUMMARY.md)
-- **시연 안내: [docs/DEMO.md](docs/DEMO.md)** (`bash tools/demo_reset.sh` 로 초기화)
-- **격리된 실습 환경 전용.** 실제 개인정보를 쓰지 않는다. 가상 인물 10명(고정 시드),
-  체크섬만 맞춘 가상 주민번호, 가짜 휴대폰번호만 쓴다.
-- 기본값은 전부 양호(안전)다. 진단 연습용 취약 동작은 `VULN_*` 플래그를 켤 때만 나온다.
+## 이 저장소가 무엇인지
 
-## 준비
+**A사 = (주)인증정보평가**, 위탁사(가상자산 거래소)의 **비대면 본인확인을 대행하는 수탁사**다.
+이 저장소는 그 시스템을 실제로 만들어 보고, 만든 시스템을 금융보안원 금융분야
+취약점 분석·평가 기준 + ISMS-P로 **설정 점검 수준**의 진단을 하기 위한 실습용 구현이다.
+
+인증 흐름은 **휴대폰 본인확인 → 얼굴인증(eKYC)** 두 단계다.
+
+```
+거래소 ──IA-01──▶ A사 ──MC-01/02──▶ 모의 통신사      (명의 대조 → CI 발급)
+   ▲              │
+   │              ├─ 이용자: 동의 → 성명·번호 → 인증번호 → 신분증 → 주민번호·발급일자 → 셀카
+   │              │                                   │
+   │              │                        X-01 CI 대조 + 모의 진위확인
+   └──IA-11 웹훅──┘                                   │
+      (IA-12 조회로 보완)                     얼굴 대조(유사도 90)
+```
+
+16단계 전체 흐름과 판정 사유 코드는 [CLAUDE.md](CLAUDE.md)에 있다.
+
+> ### 실습 전용이다
+> - **실제 개인정보를 입력하지 않는다.** 가상 인물 10명([samples/people.json](samples/people.json))만 쓴다.
+>   성명은 Faker ko_KR, 주민번호는 **체크섬만 맞춘 가상 값**, 휴대폰번호는 가짜 번호다.
+> - 샘플 이미지도 전부 **합성 이미지**다. 실제 사람의 사진이 아니다.
+> - 실제 AWS·실제 통신사·실제 진위확인을 호출하지 않는다(인터페이스만 두고 로컬 구현으로 대체).
+> - 격리된 환경에서만 띄운다. 모든 서버는 `127.0.0.1`에만 바인딩한다.
+
+---
+
+## 빠른 시작
+
+### 준비 (macOS 기준)
 
 ```bash
+# Python 3.11 (uv)
+curl -LsSf https://astral.sh/uv/install.sh | sh     # uv가 없으면
 uv python install 3.11
 uv venv --python 3.11
 uv pip install -r requirements.txt
+
+# Docker Desktop을 띄워 둔다 (PostgreSQL 16 컨테이너용)
 ```
 
-## 로컬 실행
+**Windows는 WSL2(Ubuntu)를 권장한다.** `tools/demo_reset.sh`가 bash 스크립트이고 경로·권한
+처리가 리눅스 기준이다. WSL2 안에서 위와 같은 순서로 하면 그대로 동작한다.
+
+### 1) 초기화 (몇 번이고 다시 돌릴 수 있다)
 
 ```bash
-cp .env.example .env                   # FLASK_APP=app, EKYC_ENV=dev, 취약 플래그 전부 false
-docker compose up -d                   # PostgreSQL 16 (127.0.0.1:5432에만 바인딩)
-.venv/bin/python seed/make_people.py   # 가상 인물 10명 → seed/people.json (마스킹 요약만 출력)
-.venv/bin/flask db upgrade             # 13개 테이블 생성
-.venv/bin/flask seed                   # 개발용 시크릿 + 진위확인 대장 + 테스트 수신함 적재
-.venv/bin/flask run                    # http://127.0.0.1:8000/healthz (D38)
+cp .env.example .env
+bash tools/demo_reset.sh
 ```
 
-모의 통신사(별도 앱, SQLite, 자체 서명 TLS):
+DB 초기화 → 마이그레이션 → 시크릿·대장·수신함 적재 → 모의 통신사 인증서·명부 →
+가짜 거래소 고객사 등록 → 관리자 2명(admin1 / auditor1) 생성 → 샘플 이미지까지 한 번에 한다.
+API Key·HMAC Secret은 `instance/fake_exchange.env`, 관리자 비밀번호·TOTP 시크릿은
+`instance/demo_admins.env`에 **권한 600으로** 저장된다(둘 다 커밋되지 않는다).
+
+### 2) 터미널 3개
+
+| 터미널 | 명령 | 띄우는 것 |
+|---|---|---|
+| ① 모의 통신사 | `.venv/bin/python -m carrier` | `https://localhost:8443` (자체 서명 TLS) |
+| ② A사 앱 | `FLASK_APP=app .venv/bin/flask run` | `http://127.0.0.1:8000` |
+| ③ 가짜 거래소 | `source instance/fake_exchange.env && .venv/bin/python tools/fake_exchange.py serve` | `http://127.0.0.1:9000/callback` (웹훅 수신) |
+
+### 3) 인증 한 바퀴 돌려 보기
 
 ```bash
-.venv/bin/python -m carrier.make_certs # carrier/certs/ 에 자체 서명 인증서 생성 (커밋 안 함)
-.venv/bin/python -m carrier.seed       # 같은 people.json으로 가입자 명부 적재
-.venv/bin/python -m carrier            # https://localhost:8443
+source instance/fake_exchange.env
+.venv/bin/python tools/fake_exchange.py request --client-user-ref demo-1
+# 출력된 auth_url 을 브라우저에서 연다 (10분·1회용)
 ```
 
-A사는 `CARRIER_CA_BUNDLE`의 인증서만 신뢰한다(인증서 고정). 인증번호는 실제로 발송되지 않으므로
-<http://127.0.0.1:8000/test-inbox/> 에서 `people.json`의 `inbox_key`로 꺼내 본다(실습 전용).
+1. 동의 4종 체크 → 성명·휴대폰번호 입력 (가상 인물 값은 아래 명령으로 본다)
+2. 실습 환경이라 문자가 오지 않는다 → **테스트 문자 수신함** <http://127.0.0.1:8000/test-inbox/> 에
+   그 인물의 `inbox_key`를 넣어 인증번호를 꺼낸다
+3. 신분증 사진으로 `samples/images/id_card.png` 업로드 → 주민번호·발급일자 입력
+4. 얼굴 사진으로 `samples/images/selfie.png` 업로드 → "본인확인이 완료됐다"
+5. 터미널 ③에 `status: SUCCEEDED` 웹훅이 서명 검증과 함께 찍힌다
+6. **관리자 콘솔** <http://127.0.0.1:8000/admin/login> 에서 `admin1` + TOTP로 들어가 이력을 본다
 
-위탁사·관리자 등록 (API Key·HMAC Secret·TOTP URI는 **생성 시 한 번만** 출력된다):
+가상 인물 값(화면에 입력할 성명·번호·주민번호·수신함 키)은 이렇게 본다. `1`을 사람 번호로 바꾼다.
 
 ```bash
-.venv/bin/flask create-client --name "SILO 거래소"   --callback-url http://127.0.0.1:9000/callback --allowed-ips 127.0.0.1
-.venv/bin/flask create-admin --login-id admin1 --role admin --allowed-ips 127.0.0.1
+.venv/bin/python -c "import json;p={x['person_no']:x for x in \
+json.load(open('seed/people.json'))['people']}[1];\
+print('성명',p['name'],'/ 번호',p['phone_number'],'/ 주민번호',p['rrn'],\
+'/ 발급일자',p['issue_date'],'/ 수신함 키',p['inbox_key'])"
 ```
 
-## 샘플 이미지
+관리자 TOTP 코드:
 
 ```bash
-.venv/bin/python tools/make_sample_images.py   # instance/samples/ (커밋 안 함)
+source instance/demo_admins.env && .venv/bin/python -c "import os,pyotp;\
+print('admin1  ', pyotp.TOTP(os.environ['ADMIN1_TOTP_SECRET']).now());\
+print('auditor1', pyotp.TOTP(os.environ['AUDITOR1_TOTP_SECRET']).now())"
 ```
 
-`FakeFaceMatcher`는 **파일명**으로 판정한다: `noface`→얼굴 0개, `twofaces`→2개,
-`mismatch`→유사도 40, 그 외→얼굴 1개·유사도 95.
-
-## 인증 흐름 확인 (가짜 거래소)
-
-`tools/fake_exchange.py`는 거래소 담당에게 넘기는 서명 구현 예시다. A사 코드를 import하지 않는다.
+건 하나를 마스킹된 상태로 들여다보기:
 
 ```bash
-# create-client가 출력한 값을 넣는다
-export EKYC_API_KEY=... EKYC_HMAC_SECRET=...
-
-.venv/bin/python tools/fake_exchange.py serve     # 터미널 1: 웹훅 수신·서명 검증
-.venv/bin/python tools/fake_exchange.py request --client-user-ref user-0001   # 터미널 2
-# 출력된 auth_url을 브라우저에서 연다 → 동의 → 휴대폰 입력 화면
-.venv/bin/python tools/fake_exchange.py query <verification_id>               # IA-12 (6단계)
+.venv/bin/python tools/peek.py --latest
 ```
 
-## 관리자 콘솔·파기 배치
+---
 
-```bash
-.venv/bin/flask create-admin --login-id admin1 --role admin --allowed-ips 127.0.0.1
-# http://127.0.0.1:8000/admin/login  (ID/PW → TOTP)
-.venv/bin/flask purge    # CI 보관기한 파기 + 종결 건의 남은 이미지 파기 (--dry-run 가능)
-.venv/bin/flask expire   # 20분 지난 진행 건을 P03으로 종결 + 웹훅
-.venv/bin/python tools/peek.py --latest   # 건 하나를 마스킹된 상태로 확인
+## 시나리오별 확인표
+
+성공 경로, 실패 코드 14종(P01~P05 · E01~E06 · X01), 관리자 콘솔, 파기 배치까지
+**"어디를 누르면 무엇이 보여야 정상인지"** 를 표로 정리했다.
+
+### ▶ [docs/DEMO.md](docs/DEMO.md)
+
+---
+
+## 위탁사(거래소) 연동 가이드
+
+거래소 쪽에서 구현할 것은 **3개**다. `tools/fake_exchange.py`가 그 **참고 구현**이고,
+A사 코드를 import하지 않고 표준 라이브러리 + `requests`만 쓴다. 그대로 가져가도 된다.
+
+| ID | 방향 | 메서드·경로 | 용도 |
+|---|---|---|---|
+| **IA-01** | 거래소 → A사 | `POST /api/v1/verifications` | 인증 요청, `auth_url` 수신 |
+| **IA-11** | A사 → 거래소 | `POST {callback_url}` | 결과 웹훅(판정 시 1회) |
+| **IA-12** | 거래소 → A사 | `GET /api/v1/verifications/{id}` | 웹훅 유실 시 결과 조회 |
+
+### 서명 규칙 (양방향 동일)
+
 ```
+X-Api-Key    발급받은 API Key
+X-Timestamp  유닉스 초 문자열 (현재 시각 ±300초)
+X-Signature  hex(HMAC-SHA256(key=HMAC Secret, msg=X-Timestamp 바이트 + 원본 본문 바이트))
+```
+
+- 구분자 없음, **소문자 hex**, 본문 없는 GET은 **빈 바이트**에 서명한다.
+- HMAC 키는 **Secret 문자열의 UTF-8 바이트**를 그대로 쓴다(Base64 디코딩하지 않는다).
+- 비교는 상수 시간 비교(`hmac.compare_digest`)로 한다.
+- 웹훅도 A사가 같은 방식으로 서명해서 보낸다. 다만 웹훅 헤더는
+  `X-Timestamp`·`X-Signature`·`Content-Type`만이고 `X-Api-Key`는 없다.
+- **웹훅은 받은 본문 바이트 그대로 검증한다.** JSON을 파싱해 다시 직렬화하면 서명이 깨진다.
+
+구현이 맞는지 아래 기준값으로 확인한다.
+
+| 입력 | 기대 서명 |
+|---|---|
+| `secret="test-secret"`, `ts="1700000000"`, `body={"client_user_ref":"u-1"}` | `8d15772196338b56f028ea824940d5cfa11c3716ec0d7cf57675a81d63d071a8` |
+| 같은 키·시각, **본문 없음** | `1b74eaf87da46877ba651ac812b24a3bf01990e9ed0101b88268f60f965729e2` |
+
+### IA-01 — 201과 200을 구분한다
+
+```http
+POST /api/v1/verifications
+{"client_user_ref": "user-0001", "return_url": "https://exchange.example/done"}
+```
+
+```json
+{
+  "verification_id": "0e2f1c9a-…",
+  "auth_url": "https://ekyc.example/verify/start/1795568659.A39MNCws…",
+  "expires_at": "2026-11-26T14:20:00+09:00"
+}
+```
+
+| 응답 | 의미 | 거래소가 할 일 |
+|---|---|---|
+| **201 Created** | 새 건을 만들었다 | `auth_url`로 이용자를 보낸다 |
+| **200 OK** | 같은 `client_user_ref`로 **진행 중인 기존 건**을 돌려줬다. `verification_id`·`expires_at`은 그대로이고 **인증창 토큰만 새로 발급**된다(이전 토큰과 이미 열려 있던 인증창은 그 즉시 무효) | 똑같이 `auth_url`로 보낸다 |
+
+- `auth_url`의 인증창 토큰은 **10분·1회용**이다. 두 번 열면 410이다.
+- `return_url`은 **그 위탁사의 `callback_url`과 같은 origin**만 허용한다(오픈 리다이렉트 방지).
+  운영(`EKYC_ENV=production`)에서는 `callback_url`·`return_url` 모두 **https만** 받는다.
+- 건 전체 제한 시간은 **20분**이다.
+- 그 외 응답: `400` 형식 오류 / `401` API Key·서명·타임스탬프 / `403` 허용 IP 아님.
+
+### IA-11 — 결과 웹훅
+
+성공:
+
+```json
+{
+  "product": "ONBOARDING",
+  "verification_id": "0e2f1c9a-…",
+  "status": "SUCCEEDED",
+  "reason_code": "OK",
+  "stages": { "phone": "PASSED", "id_card": "PASSED", "face": "PASSED" },
+  "name": "홍길동",
+  "birth_date": "1990-01-01",
+  "ci_mock": "(88자 Base64)",
+  "verified_at": "2026-11-26T14:03:21+09:00"
+}
+```
+
+실패(예: X01 — 휴대폰 명의자와 신분증 명의자가 다름):
+
+```json
+{
+  "product": "ONBOARDING",
+  "verification_id": "0e2f1c9a-…",
+  "status": "FAILED",
+  "reason_code": "X01",
+  "stages": { "phone": "PASSED", "id_card": "FAILED", "face": "NOT_STARTED" },
+  "verified_at": null
+}
+```
+
+- **실패·취소·만료 웹훅에는 `name`·`birth_date`·`ci_mock`이 들어가지 않는다.**
+- `status`: `SUCCEEDED` / `FAILED` / `CANCELLED` / `EXPIRED`,
+  `stages` 값: `PASSED` / `FAILED` / `NOT_STARTED`.
+- 판정 시 **1회만** 보낸다(타임아웃 3초). 재전송하지 않으므로 유실은 IA-12로 보완한다.
+- 거래소는 **200**으로 응답한다. 200을 받은 시점이 CI 전달 시점으로 기록되고,
+  그때부터 CI 보관기한 7일이 시작된다.
+
+### IA-12 — 결과 조회
+
+```http
+GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
+```
+
+웹훅과 같은 항목에 `ci_purged_at`이 붙는다. **주민번호와 이미지는 어떤 경우에도 돌려주지 않는다.**
+진행 중인 건도 조회할 수 있다(`status: "PENDING"`). 다른 위탁사의 건은 `404`다.
+
+### 키 취급 원칙
+
+> **API Key와 HMAC Secret을 git 저장소나 채팅으로 주고받지 않는다.**
+> 두 값은 `flask create-client`가 **생성 시 한 번만** 출력한다. A사 DB에는 API Key의
+> `sha256` 해시만 저장되고, HMAC Secret은 시크릿 저장소(로컬은 `instance/dev_secrets.json`,
+> 운영은 AWS Secrets Manager)에만 들어간다. 분실하면 재발급한다.
+> 전달은 비밀 관리 도구나 대면 등 별도 경로로 한다.
+
+---
+
+## 폴더 구조
+
+```
+.
+├─ app/                     A사 Flask 앱
+│  ├─ api/                  IA-01, IA-12, 웹훅 전송(IA-11)
+│  ├─ verify/               인증창 IA-02~IA-10, 건 종결
+│  ├─ test_inbox/           IA-05 테스트 문자 수신함 (실습 전용, 진단 범위 제외)
+│  ├─ mock_mois/            모의 진위확인 — 함수만, HTTP 라우트 없음
+│  ├─ admin/                관리자 콘솔(로그인·이력·이미지 열람·접속기록·권한)
+│  ├─ common/               서명·CI·주민번호·암복호화·마스킹·stage·저장소·얼굴 대조 등
+│  ├─ config.py             9장 설정값 + 취약 플래그(VULN_*, 기본 전부 False)
+│  ├─ models.py             13개 테이블
+│  └─ cli.py                flask seed / create-client / create-admin / purge / expire
+├─ carrier/                 모의 통신사: 별도 Flask 앱 + SQLite + 자체 서명 TLS(8443)
+├─ migrations/              Alembic 마이그레이션
+├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개)
+├─ seed/make_people.py      가상 인물 생성기(고정 시드)
+├─ tools/                   demo_reset.sh · fake_exchange.py · peek.py · make_sample_images.py
+├─ tests/                   pytest (340개)
+├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
+└─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
+```
+
+커밋되지 않는 것: `.env`, `instance/` 전체(시크릿·세션·업로드 이미지·발급한 계정 정보),
+`carrier/certs/`(TLS 개인키·인증서), `seed/people.json`(작업용 사본), 모든 `*.sqlite3`.
+**각자 `tools/demo_reset.sh`로 자기 환경에서 만든다.**
+
+---
 
 ## 테스트
 
 ```bash
-.venv/bin/python -m pytest -q                     # SQLite 메모리 (docker 없이도 돈다)
+# 기본: SQLite 메모리 — docker 없이도 돈다
+.venv/bin/python -m pytest -q
 
-# PostgreSQL로 돌리기 (별도 테스트 DB). @pytest.mark.postgres 테스트도 함께 돈다
+# PostgreSQL로도 돌린다(별도 테스트 DB). 동시 제출 테스트가 함께 돈다
 docker compose exec -T db psql -U ekyc -d postgres -c "CREATE DATABASE ekyc_test OWNER ekyc;"
 TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
   .venv/bin/python -m pytest -q
 ```
 
-`seed/people.json`, `instance/`, 인증서, 업로드 파일은 커밋하지 않는다(.gitignore).
+`@pytest.mark.postgres`가 붙은 동시 제출 테스트(인증창 토큰·인증번호·대조 토큰의 "성공 1회" 확인)는
+실제 WSGI 서버를 띄워 8개 병렬 요청을 보낸다. SQLite로 돌리면 skip된다.
+
+---
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | **기준 명세.** 16단계 흐름, stage 규칙, API, 데이터 모델 13개, 판정 사유 코드, 양호 통제와 취약 플래그 |
+| [docs/DEMO.md](docs/DEMO.md) | 시연·확인 절차와 시나리오별 정상 결과표 |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 설계 결정 기록(D1~D79). 맨 위 0절이 **거래소와 합의할 계약**(서명 규칙·응답 코드·웹훅 형식) |
+| [docs/NOTION_SUMMARY.md](docs/NOTION_SUMMARY.md) | **노션 반영 요약.** 구현하면서 명세를 바꾼 결정만 노션 문서별(API 명세 / DB 설계 / 요구사항·기능 / 구성도)로 묶은 것 |
+| [samples/README.md](samples/README.md) | 샘플 데이터 설명(전부 가상) |
+
+---
+
+## 현재 상태
+
+**1~8단계 완료. 전부 "양호" 기준으로 동작한다.**
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| 1 | 가상 인물 시드, 공통 모듈(CI·주민번호·서명·암복호화·마스킹) | 완료 |
+| 2 | `create_app`, 설정, 13개 테이블 + 마이그레이션, CLI | 완료 |
+| 3 | IA-01·02·03·10, `@require_stage`, 서버 사이드 세션, 가짜 거래소 | 완료 |
+| 4 | 모의 통신사(MC-01·02, TLS), IA-04·05·06, `phone_events` | 완료 |
+| 5 | IA-07·08(체크섬 → X-01 → 진위확인), Storage·FaceMatcher | 완료 |
+| 6 | IA-09 최종 판정, IA-11 웹훅, IA-12, 결과 화면 | 완료 |
+| 7 | 실패 경로 전부(P01~P05·E01~E06·X01·만료·취소) + 동시 제출 | 완료 |
+| 8 | 관리자 콘솔, `access_logs`, `purge`·`expire` | 완료 |
+| 9 | **취약 플래그 6개**(`VULN_W08`·`W09`·`W10`·`W14`·`W17`·`C10`) + 플래그별 테스트 쌍 | **예정** |
+
+- 지금은 **모든 `VULN_*` 플래그가 기본 False**이고, 그 상태에서 양호 통제가 동작하는 것을
+  테스트로 확인해 둔 상태다. 9단계에서 플래그를 켰을 때의 취약 동작과
+  "기본값에서는 막힌다 / 켜면 뚫린다" 테스트 쌍을 붙인다.
+- 서버·AWS 설정 영역의 취약(U-03, U-07, A-01, C-03 등)은 앱 코드 범위 밖이라
+  나중에 `ops/apply_vuln.sh` · `ops/revert_vuln.sh`로 만든다.
+- **진단 범위**: 설정 점검이 기본이고, 설정만으로 판정할 수 없는 웹 항목은
+  **가상 데이터와 테스트 계정으로 요청을 재현해 확인하는 데까지만** 한다.
+  실제 공격·데이터 탈취는 하지 않는다.
+- 진단 대상 배포본은 `EKYC_ENV=production`으로 띄운다. 그때만 세션 쿠키 `Secure`,
+  HSTS, https 강제가 켜진다.
