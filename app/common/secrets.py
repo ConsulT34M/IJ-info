@@ -29,6 +29,7 @@ KEY_SECRET_NAMES = (
     "ekyc/admin-otp-key",
     "carrier/match-hmac-key",
     "carrier/rrn-key",
+    "carrier/subscriber-key",
 )
 
 DEFAULT_DB_DSN = "postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc"

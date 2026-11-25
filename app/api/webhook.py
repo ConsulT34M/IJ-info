@@ -86,6 +86,11 @@ def encode_payload(payload: dict) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
+def post_json(url: str, body: bytes, headers: dict, timeout: float):
+    """웹훅 HTTP 전송. 테스트는 이 함수만 바꿔 끼운다(통신사 호출과 분리)."""
+    return requests.post(url, data=body, headers=headers, timeout=timeout)
+
+
 def was_sent(verification: Verification) -> bool:
     """이미 보낸 건인지 본다(1회 전송)."""
     return bool(
@@ -119,15 +124,15 @@ def send_result_webhook(verification: Verification) -> Callback | None:
 
     http_status = None
     try:
-        response = requests.post(
+        response = post_json(
             client.callback_url,
-            data=body,
-            headers={
+            body,
+            {
                 "Content-Type": "application/json",
                 "X-Timestamp": timestamp,
                 "X-Signature": build_signature(secret, timestamp, body),
             },
-            timeout=current_app.config["WEBHOOK_TIMEOUT"],
+            current_app.config["WEBHOOK_TIMEOUT"],
         )
         http_status = response.status_code
     except requests.RequestException as exc:

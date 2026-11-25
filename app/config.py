@@ -62,6 +62,7 @@ class Config:
     ADMIN_SESSION_TIMEOUT = timedelta(minutes=30) # 관리자 세션 30분
     API_TIMESTAMP_TOLERANCE = 300                 # X-Timestamp ±5분
     WEBHOOK_TIMEOUT = 3                           # 웹훅 타임아웃 3초
+    CARRIER_TIMEOUT = 5                           # 모의 통신사 호출 타임아웃(D44)
 
     # 약관 버전 (동의 기록에 남긴다)
     CONSENT_VERSIONS = {

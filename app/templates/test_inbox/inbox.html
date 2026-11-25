@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}테스트 문자 수신함{% endblock %}
+{% block content %}
+<div class="alert alert-warning" role="alert">
+  실습 전용 화면이다. 실제 문자 발송 대신 인증번호를 여기서 꺼내 본다. 진단 범위에서 제외한다.
+</div>
+
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+{% if code %}
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5 card-title">{{ phone_mask }}</h2>
+    <p class="display-6 mb-1">{{ code }}</p>
+    <p class="text-secondary small mb-0">유효 시각 {{ code_expires_at }} (발송 {{ issue_no }}회차)</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <form method="post" action="{{ url_for('test_inbox.latest') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="inbox_key">수신함 키</label>
+        <input class="form-control" type="text" id="inbox_key" name="inbox_key"
+               autocomplete="off" required>
+        <div class="form-text">seed/people.json의 inbox_key 값이다.</div>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">최근 인증번호 보기</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

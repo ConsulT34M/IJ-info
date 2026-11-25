@@ -55,19 +55,15 @@ def _parse_ips(raw: str) -> list[str]:
     return entries
 
 
-@click.command("seed")
-@click.option("--people", "people_path", type=Path, default=PEOPLE_FILE, show_default=True)
-@with_appcontext
-def seed_command(people_path: Path) -> None:
-    """개발용 시크릿을 만들고 진위확인 대장·테스트 수신함을 적재한다."""
-    secret_store.generate_dev_secrets()
-    click.echo(f"시크릿 확인: {secret_store.secrets_path()}")
+def seed_people(people: list[dict]) -> dict[str, int]:
+    """진위확인 대장과 테스트 수신함을 적재한다(commit은 호출부에서).
 
-    people = _load_people(people_path)
+    CLI와 테스트가 같은 코드를 쓰도록 분리했다.
+    """
     mois_key = secret_store.get_key("ekyc/mois-key")
     phone_key_secret = secret_store.get_key("ekyc/phone/phone-hmac-key")
 
-    mois_added = mois_updated = phone_added = phone_updated = 0
+    counts = {"mois_added": 0, "mois_updated": 0, "phone_added": 0, "phone_updated": 0}
     for person in people:
         digits = normalize_rrn(person["rrn"])
         if digits is None:
@@ -86,12 +82,12 @@ def seed_command(people_path: Path) -> None:
                     status=person["mois_status"],
                 )
             )
-            mois_added += 1
+            counts["mois_added"] += 1
         else:
             entry.name = person["name"]
             entry.issue_date = date.fromisoformat(person["issue_date"])
             entry.status = person["mois_status"]
-            mois_updated += 1
+            counts["mois_updated"] += 1
 
         phone_digits = person["phone_number"]
         phone_key = hmac_sha256_hex(phone_key_secret, phone_digits)
@@ -105,16 +101,29 @@ def seed_command(people_path: Path) -> None:
                     next_issue_at=None,
                 )
             )
-            phone_added += 1
+            counts["phone_added"] += 1
         else:
             phone.phone_mask = mask_phone(phone_digits)
             phone.inbox_key_hash = sha256_hex(person["inbox_key"])
-            phone_updated += 1
+            counts["phone_updated"] += 1
 
+    return counts
+
+
+@click.command("seed")
+@click.option("--people", "people_path", type=Path, default=PEOPLE_FILE, show_default=True)
+@with_appcontext
+def seed_command(people_path: Path) -> None:
+    """개발용 시크릿을 만들고 진위확인 대장·테스트 수신함을 적재한다."""
+    secret_store.generate_dev_secrets()
+    click.echo(f"시크릿 확인: {secret_store.secrets_path()}")
+
+    people = _load_people(people_path)
+    counts = seed_people(people)
     db.session.commit()
 
-    click.echo(f"진위확인 대장: 추가 {mois_added}건, 갱신 {mois_updated}건")
-    click.echo(f"테스트 수신함: 추가 {phone_added}건, 갱신 {phone_updated}건")
+    click.echo(f"진위확인 대장: 추가 {counts['mois_added']}건, 갱신 {counts['mois_updated']}건")
+    click.echo(f"테스트 수신함: 추가 {counts['phone_added']}건, 갱신 {counts['phone_updated']}건")
     for person in people:
         click.echo(
             f"  {person['person_no']:>2} {mask_name(person['name'])} "

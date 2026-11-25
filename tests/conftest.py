@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 from datetime import timedelta
@@ -96,7 +97,7 @@ def people():
 
 
 @pytest.fixture
-def app(dev_secrets, tmp_path, monkeypatch):
+def app(dev_secrets, carrier_cert, tmp_path, monkeypatch):
     """SQLite 메모리 DB를 쓰는 앱. 취약 플래그는 전부 꺼진 상태로 시작한다."""
     monkeypatch.setenv("EKYC_ENV", "dev")
     for flag in VULN_FLAGS:
@@ -109,6 +110,7 @@ def app(dev_secrets, tmp_path, monkeypatch):
             "SQLALCHEMY_DATABASE_URI": url or "sqlite://",
             "UPLOAD_DIR": tmp_path / "uploads",
             "PUBLIC_BASE_URL": "http://127.0.0.1:8000",
+            "CARRIER_CA_BUNDLE": str(carrier_cert["cert"]),
         },
         instance_path=str(tmp_path / "instance"),
     )
@@ -219,17 +221,143 @@ def sent_webhooks(monkeypatch):
     class _Response:
         status_code = 200
 
-    def _post(url, data=None, headers=None, timeout=None):
+    def _post_json(url, body, headers, timeout):
         calls.append(
             {
                 "url": url,
-                "body": data,
+                "body": body,
                 "headers": headers or {},
-                "payload": json.loads(data.decode("utf-8")),
+                "payload": json.loads(body.decode("utf-8")),
                 "timeout": timeout,
             }
         )
         return _Response()
 
-    monkeypatch.setattr("app.api.webhook.requests.post", _post)
+    monkeypatch.setattr("app.api.webhook.post_json", _post_json)
     return calls
+
+
+@pytest.fixture(scope="session")
+def carrier_cert(tmp_path_factory):
+    """자체 서명 인증서를 세션당 한 번 만든다(인증서 고정 테스트용)."""
+    from carrier.make_certs import make_self_signed
+
+    directory = tmp_path_factory.mktemp("carrier-certs")
+    cert_path = directory / "carrier.crt"
+    key_path = directory / "carrier.key"
+    make_self_signed(cert_path, key_path)
+    return {"cert": cert_path, "key": key_path}
+
+
+@pytest.fixture
+def carrier_app(dev_secrets, tmp_path, people):
+    """가입자 명부가 적재된 모의 통신사 앱."""
+    from carrier import create_carrier_app
+    from carrier.models import db as carrier_db
+    from carrier.seed import seed_client, seed_subscribers
+
+    application = create_carrier_app(
+        {"TESTING": True}, instance_path=str(tmp_path / "carrier-instance")
+    )
+    # 컨텍스트를 열어 둔 채로 yield하면 A사 앱의 db 세션과 섞인다. 적재만 하고 바로 닫는다.
+    with application.app_context():
+        carrier_db.create_all()
+        seed_subscribers(people)
+        seed_client()
+        carrier_db.session.commit()
+        carrier_db.session.remove()
+    return application
+
+
+@pytest.fixture
+def carrier_backend(app, carrier_app, monkeypatch):
+    """A사의 통신사 호출을 모의 통신사 앱으로 보낸다(TLS 없이 같은 JSON 계약으로)."""
+    from urllib.parse import urlparse
+
+    calls: list[dict] = []
+
+    class _Response:
+        def __init__(self, status_code: int, body: bytes):
+            self.status_code = status_code
+            self._body = body
+
+        def json(self):
+            return json.loads(self._body.decode("utf-8"))
+
+    def _post(url, json=None, headers=None, timeout=None, verify=None):  # noqa: A002
+        calls.append(
+            {"url": url, "payload": json, "headers": headers or {}, "timeout": timeout, "verify": verify}
+        )
+        with carrier_app.test_client() as carrier_http:
+            response = carrier_http.post(urlparse(url).path, json=json, headers=headers)
+            return _Response(response.status_code, response.get_data())
+
+    monkeypatch.setattr("app.common.carrier.requests.post", _post)
+    return calls
+
+
+@pytest.fixture
+def flow(client, api_post, app):
+    """인증창 흐름을 단계별로 진행하는 도우미."""
+
+    class Flow:
+        def __init__(self):
+            self.verification_id = None
+            self._csrf_token = None
+
+        def start(self, client_user_ref: str = "user-0001", return_url: str | None = None):
+            payload = {
+                "client_user_ref": client_user_ref,
+                "return_url": return_url or "http://127.0.0.1:9000/done",
+            }
+            body = api_post("/api/v1/verifications", payload).get_json()
+            self.verification_id = uuid.UUID(body["verification_id"])
+            token = body["auth_url"].rsplit("/", 1)[-1]
+            assert client.get(f"/verify/start/{token}").status_code == 302
+            page = client.get("/verify/consent")
+            self._csrf_token = re.search(
+                r'name="csrf_token" value="([^"]+)"', page.get_data(as_text=True)
+            ).group(1)
+            return self.verification_id
+
+        def post(self, path: str, data: dict | None = None, **kwargs):
+            payload = dict(data or {})
+            payload.setdefault("csrf_token", self._csrf_token)
+            return client.post(path, data=payload, **kwargs)
+
+        def consent(self):
+            versions = app.config["CONSENT_VERSIONS"]
+            data = {name: "on" for name in versions}
+            data.update({f"{name}_version": value for name, value in versions.items()})
+            return self.post("/verify/consent", data)
+
+        def to_phone(self, **kwargs):
+            self.start(**kwargs)
+            assert self.consent().status_code == 302
+            return self.verification_id
+
+        def request_otp(self, name: str, phone_number: str):
+            return self.post("/verify/phone/otp", {"name": name, "phone_number": phone_number})
+
+        def resend_otp(self):
+            return self.post("/verify/phone/otp", {"resend": "1"})
+
+        def confirm_otp(self, code: str):
+            return self.post("/verify/phone/confirm", {"code": code})
+
+        def inbox_code(self, inbox_key: str) -> str | None:
+            response = client.post("/test-inbox/latest", data={"inbox_key": inbox_key, "csrf_token": self._csrf_token})
+            found = re.search(r'class="display-6 mb-1">(\d{6})<', response.get_data(as_text=True))
+            return found.group(1) if found else None
+
+    return Flow()
+
+
+@pytest.fixture
+def seeded(app, people):
+    """A사 쪽 진위확인 대장·테스트 수신함 적재 (flask seed와 같은 내용)."""
+    from app.cli import seed_people
+
+    seed_people(people)
+    db.session.commit()
+    return people

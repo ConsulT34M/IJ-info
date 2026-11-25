@@ -47,9 +47,12 @@ _PLAIN_KV_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])((?:" + _KEY_ALTERNATION + r")\s*[=:]\s*)([^\s,;&)}\]\"']+)",
     re.IGNORECASE,
 )
-_KOREAN_LABEL_PATTERN = re.compile(
-    r"(성명|이름|휴대폰번호|휴대폰|인증번호|주민번호|주민등록번호)\s*[:=]?\s*"
-    r"([가-힣]{2,5}|[\d-]{4,14})"
+# 라벨 뒤에 올 수 있는 값의 종류를 나눠 둔다. 그래야 "인증번호 발송" 같은 문구가 지워지지 않는다.
+# 성명은 구분자가 있는 형태만 지운다("성명 대조 실패" 같은 문구를 망치지 않게).
+# 코드에서 성명 원문을 로그에 넣지 않는 것이 1차 방어이고, 이 필터는 2차 방어다.
+_KOREAN_NAME_LABEL = re.compile(r"(성명|이름)(\s*[:=]\s*)([가-힣]{2,5})")
+_KOREAN_NUMBER_LABEL = re.compile(
+    r"(인증번호|주민번호|주민등록번호|휴대폰번호|휴대폰)(\s*[:=]?\s*)(\d[\d-]{3,13})(?![\d*-])"
 )
 
 
@@ -89,12 +92,14 @@ def scrub(text: str) -> str:
     """로그 한 줄에서 민감한 값을 지운다."""
     if not text:
         return text
-    out = _RRN_PATTERN.sub("[RRN]", text)
-    out = _PHONE_PATTERN.sub(lambda m: f"{m.group(1)}-****-{m.group(3)}", out)
-    out = _CI_PATTERN.sub("[CI]", out)
+    # 라벨이 붙은 형태를 먼저 지우고, 그다음 값 자체의 모양으로 한 번 더 훑는다
+    out = _KOREAN_NUMBER_LABEL.sub(lambda m: f"{m.group(1)}={REDACTED}", text)
+    out = _KOREAN_NAME_LABEL.sub(lambda m: f"{m.group(1)}={REDACTED}", out)
     out = _JSON_KV_PATTERN.sub(lambda m: f'{m.group(1)}"{REDACTED}"', out)
     out = _PLAIN_KV_PATTERN.sub(lambda m: f"{m.group(1)}{REDACTED}", out)
-    out = _KOREAN_LABEL_PATTERN.sub(lambda m: f"{m.group(1)}={REDACTED}", out)
+    out = _RRN_PATTERN.sub("[RRN]", out)
+    out = _PHONE_PATTERN.sub(lambda m: f"{m.group(1)}-****-{m.group(3)}", out)
+    out = _CI_PATTERN.sub("[CI]", out)
     return out
 
 

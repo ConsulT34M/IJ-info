@@ -29,6 +29,17 @@ docker compose up -d                   # PostgreSQL 16 (127.0.0.1:5432에만 바
 .venv/bin/flask run                    # http://127.0.0.1:8000/healthz (D38)
 ```
 
+모의 통신사(별도 앱, SQLite, 자체 서명 TLS):
+
+```bash
+.venv/bin/python -m carrier.make_certs # carrier/certs/ 에 자체 서명 인증서 생성 (커밋 안 함)
+.venv/bin/python -m carrier.seed       # 같은 people.json으로 가입자 명부 적재
+.venv/bin/python -m carrier            # https://localhost:8443
+```
+
+A사는 `CARRIER_CA_BUNDLE`의 인증서만 신뢰한다(인증서 고정). 인증번호는 실제로 발송되지 않으므로
+<http://127.0.0.1:8000/test-inbox/> 에서 `people.json`의 `inbox_key`로 꺼내 본다(실습 전용).
+
 위탁사·관리자 등록 (API Key·HMAC Secret·TOTP URI는 **생성 시 한 번만** 출력된다):
 
 ```bash

@@ -30,9 +30,19 @@ STAGE_ENDPOINTS = {
 }
 
 
+def _drop_cached_csrf_token() -> None:
+    """요청 컨텍스트에 캐시된 CSRF 토큰을 버린다.
+
+    세션을 비우면 CSRF 원본값도 사라지므로, g에 남은 캐시를 함께 버려야 다음 화면에서
+    새 토큰을 만들어 세션에 다시 심는다.
+    """
+    g.pop(current_app.config.get("WTF_CSRF_FIELD_NAME", "csrf_token"), None)
+
+
 def start_session(verification: Verification) -> None:
     """인증창 진입 시 서버 세션을 새로 만든다(세션 고정 방지)."""
     session.clear()
+    _drop_cached_csrf_token()
     regenerate = getattr(current_app.session_interface, "regenerate", None)
     if callable(regenerate):
         regenerate(session)
@@ -44,6 +54,7 @@ def start_session(verification: Verification) -> None:
 def end_session() -> None:
     """인증창 세션을 비운다."""
     session.clear()
+    _drop_cached_csrf_token()
 
 
 def session_verification_id() -> uuid.UUID | None:

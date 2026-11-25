@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}인증번호 확인{% endblock %}
+{% block content %}
+{% if error %}
+<div class="alert alert-danger" role="alert">{{ error }}</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h5 card-title">인증번호 입력</h2>
+    <p class="card-text text-secondary small mb-1">
+      {{ phone_mask }} 로 6자리 인증번호를 보냈다. 유효 시각 {{ code_expires_at }}.
+    </p>
+    <p class="card-text text-secondary small">
+      실습 환경이라 문자가 오지 않는다. <a href="{{ url_for('test_inbox.inbox_page') }}" target="_blank" rel="noreferrer">테스트 수신함</a>에서 확인한다.
+      (발송 {{ issue_no }}/{{ max_issues }}회, 재발송 가능 {{ resend_at }})
+    </p>
+
+    <form method="post" action="{{ url_for('verify.phone_confirm') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="code">인증번호</label>
+        <input class="form-control" type="text" id="code" name="code" maxlength="6"
+               inputmode="numeric" autocomplete="one-time-code" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">확인</button>
+    </form>
+  </div>
+</div>
+
+<div class="d-grid gap-2">
+  <form method="post" action="{{ url_for('verify.phone_otp') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="resend" value="1">
+    <button type="submit" class="btn btn-outline-primary w-100">인증번호 재발송</button>
+  </form>
+  <form method="post" action="{{ url_for('verify.cancel') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-outline-secondary w-100">취소하고 돌아가기</button>
+  </form>
+</div>
+{% endblock %}

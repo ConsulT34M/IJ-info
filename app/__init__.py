@@ -107,11 +107,13 @@ def _register_security_headers(app: Flask) -> None:
 def _register_blueprints(app: Flask) -> None:
     """Blueprint 등록. api는 HMAC 서명으로 보호하므로 CSRF를 면제한다."""
     from app.api import bp as api_bp
+    from app.test_inbox import bp as test_inbox_bp
     from app.verify import bp as verify_bp
 
     app.register_blueprint(api_bp)
     csrf.exempt(api_bp)
     app.register_blueprint(verify_bp)
+    app.register_blueprint(test_inbox_bp)
 
 
 # 이용자에게 보여줄 오류 문구. 내부 사정은 드러내지 않는다.
