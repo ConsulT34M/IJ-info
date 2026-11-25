@@ -40,8 +40,11 @@ if [ "$ASSUME_YES" -ne 1 ]; then
   case "$answer" in y|Y|yes|YES) ;; *) echo "취소했다."; exit 0 ;; esac
 fi
 
-step "PostgreSQL 기동 확인"
-docker compose up -d >/dev/null
+step "컨테이너 기동 (Apache · Gunicorn · PostgreSQL)"
+# 웹서버 인증서가 없으면 web 컨테이너가 뜨지 않는다. 처음 한 번만 만들어진다.
+mkdir -p instance
+bash ops/make_web_certs.sh | tail -n 1
+docker compose up -d --build >/dev/null
 for _ in $(seq 1 30); do
   if docker compose exec -T db pg_isready -U ekyc -d ekyc >/dev/null 2>&1; then break; fi
   sleep 1
@@ -165,6 +168,13 @@ cat <<EOF
   .venv/bin/python tools/pass_app.py register   # 번호·성명·생년월일을 물어본다
   .venv/bin/python tools/pass_app.py watch      # 문자가 오면 화면에 뜬다
   기기 등록은 초기화할 때마다 다시 한다(수신함 키가 seed 값으로 돌아간다).
+
+[웹 서비스]  두 가지 방법 중 하나로 연다.
+  운영 형태(진단 대상):  https://localhost:9443      ← 컨테이너가 이미 떠 있다
+                          Apache → Gunicorn → Flask. 자체 서명이라 경고가 뜬다.
+  개발 형태(코드 수정):  .venv/bin/flask run         → http://127.0.0.1:8000
+
+  웹서버 양호/취약 전환:  ops/apply_vuln.sh · ops/revert_vuln.sh
 
 다음: docs/DEMO.md 의 "터미널 3개" 대로 띄운다.
 ────────────────────────────────────────────────────────────────────────
