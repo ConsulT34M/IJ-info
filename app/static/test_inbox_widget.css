@@ -5,6 +5,8 @@ body{margin:0;background:transparent;color:#253124}
 .message p{margin:0 0 7px}
 .sender{font-weight:800}
 .code{color:#628f2d;font-size:24px;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.otp-copy{font-size:12px;letter-spacing:-.03em;white-space:nowrap}
+.otp-copy .code{font-size:18px;letter-spacing:0}
 small,.hint{color:#626e62}
 .error{color:#a72b27;font-weight:700}
 form{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}
