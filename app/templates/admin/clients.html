@@ -1,0 +1,35 @@
+{% extends "admin/base.html" %}
+{% block title %}위탁사{% endblock %}
+{% block content %}
+<h2 class="h5 mb-3">위탁사 <span class="text-secondary small">({{ rows | length }}곳)</span></h2>
+
+<div class="table-responsive bg-white border rounded">
+  <table class="table table-sm align-middle mb-0">
+    <thead class="table-light">
+      <tr><th>이름</th><th>상태</th><th>결과 통보 주소</th><th>허용 IP</th><th>HMAC 참조</th><th class="text-end">인증 건수</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="fw-semibold">{{ row.name }}</td>
+        <td>
+          {% if row.status == 'ACTIVE' %}<span class="badge text-bg-success">사용</span>
+          {% else %}<span class="badge text-bg-secondary">중지</span>{% endif %}
+        </td>
+        <td class="small">{{ row.callback_url }}</td>
+        <td class="small"><code>{{ row.allowed_ips }}</code></td>
+        <td class="small"><code class="text-secondary">{{ row.hmac_secret_ref }}</code></td>
+        <td class="text-end">{{ counts.get(row.id, 0) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-secondary py-4">등록된 위탁사가 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="text-secondary small mt-3 mb-0">
+  등록·키 발급은 화면에서 하지 않고 <code>flask create-client</code> 로만 합니다(F-01).
+  API Key는 해시로만 보관하므로 이 화면에 원문이 나올 수 없고, HMAC Secret은 참조 이름만 보여 줍니다.
+</p>
+{% endblock %}

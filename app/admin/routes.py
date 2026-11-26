@@ -43,7 +43,9 @@ from app.common.hmac_auth import ip_allowed
 from app.common.log_mask import mask_name, mask_rrn
 from app.common.storage import StorageError, get_storage
 from app.common.timeutil import now_utc
+from app.config import enabled_vuln_flags
 from app.models import (
+    REASON_CODES,
     AccessLog,
     Admin,
     FaceCheck,
@@ -79,7 +81,7 @@ def _enforce_admin_ip():
 def login():
     """1단계: ID/PW."""
     if current_user.is_authenticated:
-        return redirect(url_for("admin.verification_list"))
+        return redirect(url_for("admin.dashboard"))
     if request.method == "GET":
         return render_template("admin/login.html")
 
@@ -137,7 +139,7 @@ def otp():
     session.permanent = True
     register_success(admin)
     current_app.logger.info("관리자 로그인: login_id=%s ip=%s", admin.login_id, client_ip())
-    return redirect(url_for("admin.verification_list"))
+    return redirect(url_for("admin.dashboard"))
 
 
 @bp.post("/logout")
@@ -157,17 +159,26 @@ def verification_list():
     """이력 목록. 조회 자체를 access_logs에 남긴다."""
     page = max(1, request.args.get("page", type=int, default=1))
     status_filter = request.args.get("status") or ""
+    reason_filter = request.args.get("reason") or ""
+    keyword = (request.args.get("q") or "").strip()[:100]
+
+    conditions = []
+    if status_filter:
+        conditions.append(Verification.status == status_filter)
+    if reason_filter:
+        conditions.append(Verification.reason_code == reason_filter)
+    if keyword:
+        # 이용자 식별자는 위탁사가 정한 값이라 개인정보가 아니다. 바인딩으로 넘긴다(W-01).
+        conditions.append(Verification.client_user_ref.ilike(f"%{keyword}%"))
 
     query = db.select(Verification).order_by(Verification.created_at.desc())
-    if status_filter:
-        query = query.where(Verification.status == status_filter)
+    count_query = db.select(db.func.count()).select_from(Verification)
+    for condition in conditions:
+        query = query.where(condition)
+        count_query = count_query.where(condition)
 
     rows = db.session.scalars(query.limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE)).all()
-    total = db.session.scalar(
-        db.select(db.func.count()).select_from(Verification)
-        if not status_filter
-        else db.select(db.func.count()).select_from(Verification).where(Verification.status == status_filter)
-    )
+    total = db.session.scalar(count_query)
 
     log_access(
         "admin",
@@ -184,7 +195,102 @@ def verification_list():
         page_size=PAGE_SIZE,
         total=total,
         status_filter=status_filter,
+        reason_filter=reason_filter,
+        keyword=keyword,
+        reason_codes=REASON_CODES,
     )
+
+
+@bp.get("/dashboard")
+@login_required
+def dashboard():
+    """운영 요약. 개인정보는 한 건도 싣지 않는다 — 집계와 사유 코드만 본다."""
+    from app.models import Callback, SiteInquiry
+
+    now = now_utc()
+    since_24h = now - timedelta(hours=24)
+    since_7d = now - timedelta(days=7)
+
+    def count(*conditions):
+        query = db.select(db.func.count()).select_from(Verification)
+        for condition in conditions:
+            query = query.where(condition)
+        return db.session.scalar(query) or 0
+
+    totals = {
+        "all": count(),
+        "today": count(Verification.created_at >= since_24h),
+        "week": count(Verification.created_at >= since_7d),
+        "pending": count(Verification.status == "PENDING"),
+    }
+    by_status = {
+        status: count(Verification.status == status)
+        for status in ("SUCCEEDED", "FAILED", "CANCELLED", "EXPIRED")
+    }
+    finished = sum(by_status.values())
+    success_rate = round(by_status["SUCCEEDED"] / finished * 100, 1) if finished else None
+
+    reasons = db.session.execute(
+        db.select(Verification.reason_code, db.func.count())
+        .where(Verification.reason_code.is_not(None))
+        .group_by(Verification.reason_code)
+        .order_by(db.func.count().desc())
+    ).all()
+
+    # 최근 실패 건. 사유 코드와 시각만 — 성명·번호는 싣지 않는다.
+    recent_failures = db.session.scalars(
+        db.select(Verification)
+        .where(Verification.status.in_(("FAILED", "EXPIRED", "CANCELLED")))
+        .order_by(Verification.completed_at.desc().nulls_last())
+        .limit(8)
+    ).all()
+
+    webhook_failed = db.session.scalar(
+        db.select(db.func.count())
+        .select_from(Callback)
+        .where(db.or_(Callback.http_status.is_(None), Callback.http_status != 200))
+    ) or 0
+    open_inquiries = db.session.scalar(
+        db.select(db.func.count()).select_from(SiteInquiry).where(SiteInquiry.status == "RECEIVED")
+    ) or 0
+
+    flags = enabled_vuln_flags(current_app)
+
+    log_access("admin", "HISTORY_VIEW", actor_id=current_user.login_id, ip=client_ip())
+    db.session.commit()
+
+    return render_template(
+        "admin/dashboard.html",
+        totals=totals,
+        by_status=by_status,
+        success_rate=success_rate,
+        reasons=reasons,
+        recent_failures=recent_failures,
+        webhook_failed=webhook_failed,
+        open_inquiries=open_inquiries,
+        vuln_flags=flags,
+    )
+
+
+@bp.get("/clients")
+@login_required
+def client_list():
+    """위탁사 목록(읽기 전용). 등록은 CLI(`flask create-client`)로만 한다(F-01).
+
+    API Key는 해시로만 보관하므로 화면에 원문이 나올 수 없다. HMAC Secret 이름도
+    참조값(`hmac_secret_ref`)만 보여 준다.
+    """
+    from app.models import Client
+
+    rows = db.session.scalars(db.select(Client).order_by(Client.name)).all()
+    counts = dict(
+        db.session.execute(
+            db.select(Verification.client_id, db.func.count()).group_by(Verification.client_id)
+        ).all()
+    )
+    log_access("admin", "HISTORY_VIEW", actor_id=current_user.login_id, ip=client_ip())
+    db.session.commit()
+    return render_template("admin/clients.html", rows=rows, counts=counts)
 
 
 @bp.get("/api/verifications")
@@ -367,6 +473,39 @@ def inquiry_detail(inquiry_id: int):
         row=row,
         render_raw=bool(current_app.config.get("VULN_W02")),
     )
+
+
+@bp.post("/inquiries/<int:inquiry_id>/answer")
+@login_required
+@role_required("admin")
+def inquiry_answer(inquiry_id: int):
+    """문의에 답변을 남긴다. auditor는 읽기만 한다."""
+    from app.models import SiteInquiry
+
+    row = db.session.get(SiteInquiry, inquiry_id)
+    if row is None:
+        abort(404, description="해당 문의를 찾을 수 없습니다.")
+
+    answer = (request.form.get("answer") or "").strip()
+    if not 1 <= len(answer) <= 2000:
+        return (
+            render_template(
+                "admin/inquiry_detail.html",
+                row=row,
+                render_raw=bool(current_app.config.get("VULN_W02")),
+                error="답변을 2,000자 이내로 입력해 주세요.",
+            ),
+            400,
+        )
+
+    row.answer = answer
+    row.status = "ANSWERED"
+    row.answered_at = now_utc()
+    db.session.commit()
+    current_app.logger.info(
+        "문의 답변: receipt_no=%s by=%s", row.receipt_no, current_user.login_id
+    )
+    return redirect(url_for("admin.inquiry_detail", inquiry_id=row.id))
 
 
 @bp.get("/access-logs")

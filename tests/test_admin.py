@@ -337,3 +337,121 @@ def test_logout_clears_the_session(admin_session):
     account = admin_session()
     assert account["http"].post("/admin/logout", data={"csrf_token": account["csrf"]}).status_code == 302
     assert account["http"].get("/admin/").status_code == 302
+
+
+# --- 대시보드 · 위탁사 · 문의 답변 (D96) --------------------------------------
+
+
+def test_dashboard_is_the_landing_page_after_login(admin_session):
+    """로그인을 마치면 대시보드로 간다."""
+    account = admin_session()
+    response = account["http"].get("/admin/dashboard")
+    assert response.status_code == 200
+    assert "운영 현황" in response.get_data(as_text=True)
+
+
+def test_dashboard_counts_without_showing_personal_data(
+    admin_session, flow, carrier_backend, person
+):
+    """집계와 사유 코드만 싣는다. 성명·번호는 대시보드에 나오지 않는다."""
+    flow.to_id_card(person)
+    account = admin_session()
+    body = account["http"].get("/admin/dashboard").get_data(as_text=True)
+
+    assert "진행 중" in body
+    assert person["name"] not in body
+    assert person["phone_number"] not in body
+    assert person["rrn"] not in body
+
+
+def test_dashboard_warns_when_a_vuln_flag_is_on(admin_session, enable_vuln):
+    """진단 전에 환경 상태를 알아차릴 수 있어야 한다."""
+    account = admin_session()
+    assert "취약 플래그가 켜져" not in account["http"].get("/admin/dashboard").get_data(as_text=True)
+
+    enable_vuln("VULN_W10")
+    body = account["http"].get("/admin/dashboard").get_data(as_text=True)
+    assert "취약 플래그가 켜져" in body and "VULN_W10" in body
+
+
+def test_dashboard_is_logged_as_a_history_view(admin_session):
+    account = admin_session()
+    account["http"].get("/admin/dashboard")
+    actions = [row.action for row in db.session.scalars(db.select(AccessLog)).all()]
+    assert "HISTORY_VIEW" in actions
+
+
+def test_client_list_shows_no_key_material(admin_session, exchange_client):
+    """API Key는 해시로만 보관한다. 화면에 원문이 나올 수 없다."""
+    account = admin_session()
+    body = account["http"].get("/admin/clients").get_data(as_text=True)
+
+    assert exchange_client["client"].name in body
+    assert exchange_client["api_key"] not in body
+    assert exchange_client["hmac_secret"] not in body
+    assert "flask create-client" in body  # 등록은 CLI로만 한다는 안내
+
+
+def test_history_filters_by_reason_and_user_ref(admin_session, make_verification):
+    make_verification(client_user_ref="alpha-1", status="FAILED", reason_code="X01")
+    make_verification(client_user_ref="beta-2", status="FAILED", reason_code="P02")
+    account = admin_session()
+
+    only_x01 = account["http"].get("/admin/?reason=X01").get_data(as_text=True)
+    assert "alpha-1" in only_x01 and "beta-2" not in only_x01
+
+    only_beta = account["http"].get("/admin/?q=beta").get_data(as_text=True)
+    assert "beta-2" in only_beta and "alpha-1" not in only_beta
+
+
+def test_history_search_is_bound_not_concatenated(admin_session, make_verification):
+    """검색어는 바인딩 파라미터다. 따옴표를 넣어도 검색어로만 쓰인다(W-01)."""
+    make_verification(client_user_ref="alpha-1")
+    account = admin_session()
+    response = account["http"].get("/admin/?q=' OR '1'='1")
+    assert response.status_code == 200
+    assert "alpha-1" not in response.get_data(as_text=True)
+
+
+def test_admin_can_answer_an_inquiry(admin_session, app):
+    from app.models import SiteInquiry
+
+    row = SiteInquiry(
+        receipt_no="IJ-20261126-AAAAAA", kind="기술 지원", company="가상거래소",
+        manager="홍길동", email="a@example.invalid", message="연동 문의입니다.", ip="127.0.0.1",
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    account = admin_session()
+    response = account["http"].post(
+        f"/admin/inquiries/{row.id}/answer",
+        data={"answer": "담당자가 메일로 회신드렸습니다.", "csrf_token": account["csrf"]},
+    )
+    assert response.status_code == 302
+
+    db.session.expire_all()
+    saved = db.session.get(SiteInquiry, row.id)
+    assert saved.status == "ANSWERED" and saved.answered_at is not None
+    assert saved.answer == "담당자가 메일로 회신드렸습니다."
+
+
+def test_auditor_cannot_answer_an_inquiry(admin_session, app):
+    """auditor는 조회만 한다."""
+    from app.models import SiteInquiry
+
+    row = SiteInquiry(
+        receipt_no="IJ-20261126-BBBBBB", kind="기술 지원", company="가상거래소",
+        manager="홍길동", email="a@example.invalid", message="문의입니다.", ip="127.0.0.1",
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    account = admin_session(role="auditor")
+    response = account["http"].post(
+        f"/admin/inquiries/{row.id}/answer",
+        data={"answer": "답변", "csrf_token": account["csrf"]},
+    )
+    assert response.status_code == 403
+    db.session.expire_all()
+    assert db.session.get(SiteInquiry, row.id).status == "RECEIVED"

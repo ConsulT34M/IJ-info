@@ -359,7 +359,7 @@ git diff ops/apache/active.conf   # 지금 어느 상태인지
 | 개인정보 처리방침 | `/privacy` | 구현된 보유기간·안전조치와 내용을 맞췄다 |
 | 실습 안내 | `/demo` | 진단 대상 목록과 시작 방법. **상단 메뉴에는 넣지 않는다** — 진짜 회사 사이트처럼 보이게 하려는 것이라 주소로만 들어간다 |
 | 인증창 | `/verify/…` | **직접 못 연다.** 위탁사의 IA-01 요청으로 받은 1회용 주소로만 (`tools/fake_exchange.py request`) |
-| 관리자 콘솔 | `/admin/login` | `flask create-admin`으로 만든 계정 + TOTP |
+| 관리자 콘솔 | `/admin/login` | `flask create-admin`으로 만든 계정 + TOTP. 대시보드 · 인증 이력 · 위탁사 · 문의 · 접속기록 · 관리자 |
 | 서버 간 API | `/api/v1/…` | `X-Api-Key` + `X-Timestamp` + `X-Signature` |
 | 테스트 문자 수신함 | `/test-inbox/` | 실습 전용. **진단 범위에서 제외**한다. `tools/pass_app.py`(모의 PASS 앱)가 기기 등록으로 수신함 키를 받는다 |
 
@@ -553,7 +553,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개 + 자료실 공개 문서)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (495개)
+├─ tests/                   pytest (517개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```
