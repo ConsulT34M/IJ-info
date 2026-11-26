@@ -553,7 +553,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개 + 자료실 공개 문서)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (526개)
+├─ tests/                   pytest (540개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```

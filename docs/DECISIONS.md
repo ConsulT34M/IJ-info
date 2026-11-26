@@ -1188,3 +1188,27 @@ CI 공유키는 A사와 모의 통신사만 갖는다. 위탁사에 키를 주�
 테스트 14개 추가(522 → 536). P01 3회 종결, P01 사유 숨김, P02 3회 종결, 형식 오류는
 횟수에 넣지 않음, 만료, 재발송 60초 제한·번호 불일치·명의 대조 생략, 멱등 재확인,
 P05, 그리고 **인증번호와 CI가 위탁사 응답에 섞여 나가지 않는지**를 고정했다.
+
+### 위탁사(RKX) 쪽 변경과 연동 확인
+
+거래소 저장소도 같이 고쳤다(`identity-service.js`, `identity-routes.js`, `signup-routes.js`,
+`public/identity.js`·`identity.html`·`identity.css`, `.env.example`, 테스트).
+**프론트엔드 구조는 건드리지 않았다** — 모의 휴대폰 잠금화면과 문자 알림은 그대로 두고
+인증번호의 출처만 바꿨다.
+
+- `mockCi()` 삭제. `IJINFO_DEMO_CI_KEY_B64` 설정도 없앴다. **위탁사는 CI 생성키를 갖지 않는다.**
+- IA-01을 `phone/confirm`에서 `identity/start`로 옮겼다. 휴대폰 단계부터 A사를 거치려면
+  인증 건이 먼저 있어야 한다.
+- `phone/start` → IA-23, `phone/confirm` → IA-24. 로컬 생성·검증 코드는 연동 설정이 없을 때의
+  오프라인 대체 경로로만 남겼다.
+- 모의 휴대폰 알림이 인증번호 대신 **문자 수신함 링크**를 띄운다. 실제 문자처럼 이용자가
+  본인 휴대폰에서 읽는다. RKX 서버는 인증번호를 받지 않는다.
+
+`tools/e2e/rkx_contract.mjs`로 확인했다. RKX 서버 전체는 MySQL이 필요해 못 띄우지만,
+**RKX가 실제로 쓰는 클라이언트 코드(`ijinfoRequest`)를 그대로 불러** A사를 호출한다.
+실제 신분증·얼굴 사진으로 `FACE_MATCHER=local`에서 **32개 항목 전부 통과**했다.
+
+확인 중에 걸린 것 하나 — 로컬 DB가 지금 `seed/people.json`과 **다른 세대로 시드**돼 있어
+수신함 열쇠가 맞지 않았다. `flask seed` + `python -m carrier.seed`를 같은 파일로 다시 돌렸다.
+양쪽이 같은 people.json을 써야 CI가 맞는다는 규칙(16장)이 실제로 물린 사례다.
+
