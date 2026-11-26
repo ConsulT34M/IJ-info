@@ -79,20 +79,35 @@ source instance/fake_exchange.env
 ```
 
 1. 동의 4종 체크 → 성명·휴대폰번호 입력 (가상 인물 값은 아래 명령으로 본다)
-2. 실습 환경이라 문자가 오지 않는다 → **모의 PASS 앱**으로 받는다. 터미널 하나를 더 열고:
+2. 실습 환경이라 문자가 오지 않는다 → **수신함 화면**에서 받는다.
+   <http://127.0.0.1:8000/test-inbox/> 을 새 탭으로 연다.
+
+   「휴대폰 등록」에 **성명 · 휴대폰번호 · 생년월일**을 넣는다. 통신사에 명의를 확인한 뒤
+   이 창이 그 번호의 수신함이 된다(실제 PASS 앱을 깔 때 하는 통신사 본인확인에 해당).
+   그 뒤로는 **「문자 확인」 버튼 하나**면 된다 — 수신함 키를 옮겨 적을 일이 없다(D99).
+
+   번호·성명·생년월일이 통신사 명부와 **전부** 맞아야 등록된다. 어느 항목이 틀렸는지는
+   알려주지 않는다(가입 여부 열거 방지).
+
+   <details><summary>터미널에서 받고 싶다면 — 모의 PASS 앱</summary>
 
    ```bash
-   # 처음 한 번: 통신사에 명의를 확인받고 기기를 등록한다 (PASS 앱 설치와 같다)
+   # 처음 한 번: 통신사에 명의를 확인받고 기기를 등록한다
    .venv/bin/python tools/pass_app.py register --phone 010... --name 홍길동 --birth 1990-01-01
    # 그 뒤로는 문자가 오면 화면에 뜬다
    .venv/bin/python tools/pass_app.py watch
    ```
 
-   번호·성명·생년월일이 통신사 명부와 **전부** 맞아야 등록된다. 등록하면 수신함 키가
-   `instance/pass_device.json`(권한 600)에 저장되고, 화면에는 찍히지 않는다.
-   브라우저로 <http://127.0.0.1:8000/test-inbox/> 에 `inbox_key`를 직접 넣는 기존 방법도 된다.
+   같은 엔드포인트·같은 명의 확인을 쓴다. 다른 점은 키를 두는 곳뿐이다 —
+   CLI는 `instance/pass_device.json`(권한 600), 브라우저는 서버 세션.
+   `seed/people.json`의 `inbox_key`를 직접 넣는 기존 방법도 된다(화면 아래 「수신함 키를 직접 입력」).
+   </details>
 3. 신분증 사진으로 `samples/images/id_card.png` 업로드 → 주민번호·발급일자 입력
 4. 얼굴 사진으로 `samples/images/selfie.png` 업로드 → "본인확인이 완료됐다"
+
+   > `samples/images/*`는 합성 이미지라 기본 `FaceMatcher`(`fake`)가 **파일명으로** 판정한다.
+   > 실제 사진으로 대조를 보려면 `samples/faces/`에 얼굴이 있는 jpg·png를 두고
+   > `FACE_MATCHER=local`로 띄운다(OpenCV로 실제 검출·대조한다). AWS에서는 `rekognition`이다.
 5. 터미널 ③에 `status: SUCCEEDED` 웹훅이 서명 검증과 함께 찍힌다
 6. **관리자 콘솔** <http://127.0.0.1:8000/admin/login> 에서 `admin1` + TOTP로 들어가 이력을 본다
 
@@ -579,6 +594,34 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 `@pytest.mark.postgres`가 붙은 동시 제출 테스트(인증창 토큰·인증번호·대조 토큰의 "성공 1회" 확인)는
 실제 WSGI 서버를 띄워 8개 병렬 요청을 보낸다. SQLite로 돌리면 skip된다.
 
+확인하는 층이 셋이다.
+
+| 무엇 | 어떻게 | 무엇을 보나 |
+|---|---|---|
+| **A사 안쪽** | `pytest` | 16단계 흐름, 사유 코드별 응답, 플래그 쌍, 동시 제출 |
+| **웹서버 설정** | `./ops/check_web.sh` (`--vuln`) | 지시어가 **실제로 먹는지** 요청을 보내 확인(D95) |
+| **위탁사 연동** | `tools/e2e/rkx_contract.mjs` | 거래소가 쓰는 클라이언트 코드로 A사를 호출 |
+
+### 위탁사(RKX) 연동 확인
+
+거래소 서버 전체를 띄우지 않고도 **계약이 맞물리는지** 본다. RKX가 실제로 쓰는
+`identity-service.js`의 `ijinfoRequest`를 그대로 불러 A사를 호출하므로, 서명 형식·엔드포인트·
+본문 모양·사유 코드가 양쪽에서 어긋나면 여기서 잡힌다.
+
+```bash
+FACE_MATCHER=local .venv/bin/flask run --port 8000    # ① A사
+.venv/bin/python -m carrier                            # ② 모의 통신사
+git clone https://github.com/ConsulT34M/Rkx.git ../Rkx # ③ 거래소 코드
+
+PYTHONPATH=. .venv/bin/python tools/e2e/reset_send_limits.py
+source instance/fake_exchange.env
+RKX_DIR=../Rkx PEOPLE_FILE=seed/people.json ID_CARD_IMAGE=samples/faces/id_card.png FACE_IMAGE=samples/faces/selfie.png NOFACE_IMAGE=samples/images/noface.png node tools/e2e/rkx_contract.mjs
+```
+
+시나리오 9개 32항목 — 성공 경로(**인증번호·CI가 응답에 새지 않는지** 포함), 위탁사 CI 거부,
+X-01, P01 3회+사유 숨김, P02 3회+형식 오류 미차감, 재발송 429, E04 재제출, 휴대폰 단계
+건너뛰기 차단, E03. 자세한 건 [tools/e2e/README.md](tools/e2e/README.md).
+
 ---
 
 ## 문서
@@ -587,8 +630,9 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | **기준 명세.** 16단계 흐름, stage 규칙, API, 데이터 모델 13개, 판정 사유 코드, 양호 통제와 취약 플래그 |
 | [docs/DEMO.md](docs/DEMO.md) | 시연·확인 절차와 시나리오별 정상 결과표 |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | 설계 결정 기록(D1~D92). 맨 위 0절이 **거래소와 합의할 계약**(서명 규칙·응답 코드·웹훅 형식, 연동 방식 두 가지) |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 설계 결정 기록(D1~D99). 맨 위 0절이 **거래소와 합의할 계약**(서명 규칙·응답 코드·웹훅 형식, 연동 방식 두 가지) |
 | [docs/NOTION_SUMMARY.md](docs/NOTION_SUMMARY.md) | **노션 반영 요약.** 구현하면서 명세를 바꾼 결정만 노션 문서별(API 명세 / DB 설계 / 요구사항·기능 / 구성도)로 묶은 것 |
+| [tools/e2e/README.md](tools/e2e/README.md) | **위탁사(RKX) 연동 확인.** 거래소가 실제로 쓰는 클라이언트 코드로 A사를 호출해 서명·엔드포인트·사유 코드를 맞춰 본다 |
 | [samples/README.md](samples/README.md) | 샘플 데이터 설명(전부 가상) |
 | [ops/apache/ekyc-good.conf](ops/apache/ekyc-good.conf) | 웹서버 **양호** 설정. 지시어마다 어떤 점검 항목인지 주석으로 적었다 |
 | [ops/apache/ekyc-vuln.conf](ops/apache/ekyc-vuln.conf) | 웹서버 **의도된 취약** 설정. 양호본과 diff를 뜨면 차이가 바로 보인다 |
@@ -614,6 +658,10 @@ TEST_DATABASE_URL=postgresql+psycopg://ekyc:ekyc@127.0.0.1:5432/ekyc_test \
 | + | IA-21·22 — 위탁사가 화면을 만드는 서버 간 경로(`mode: DIRECT`) | 완료 |
 | + | 자료실·문의 저장 + 웹 점검용 플래그 3개(`W01`·`W02`·`W05`) | 완료 |
 | + | 운영 형태 스택 — Apache 2.4 → Gunicorn → Flask, 웹서버 양호/취약 전환 | 완료 |
+| + | 얼굴 대조 실구현 — `local`(OpenCV) · `rekognition`(AWS). 파일명을 보지 않는다 | 완료 |
+| + | 관리자 콘솔 대시보드 · 위탁사 목록 · 문의 답변 · 이력 필터 | 완료 |
+| + | IA-23·24 — **휴대폰 본인확인도 A사가 한다**(DIRECT). CI는 A사 밖으로 나가지 않는다 | 완료 |
+| + | 수신함 화면에서 휴대폰 등록 — 터미널 없이 인증번호를 받는다 | 완료 |
 
 - 플래그는 **9개**다. 14장의 6개(`W08`·`W09`·`W10`·`W14`·`W17`·`C10`)에 더해,
   홈페이지 자료실·문의에서 웹 점검 항목을 재현하는 3개가 있다(D90):

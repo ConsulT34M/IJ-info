@@ -40,7 +40,7 @@ async function readCode(inboxKey) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', cookie },
     body: new URLSearchParams({ inbox_key: inboxKey, csrf_token: token }),
   });
-  return (/class="display-6 mb-1">(\d{6})</.exec(await res.text()) || [])[1];
+  return (/class="ij-code mb-1">(\d{6})</.exec(await res.text()) || [])[1];
 }
 
 const start = async ref => (await ijinfoRequest('POST', '/verifications', { client_user_ref: ref, mode: 'DIRECT' }, opts)).verification_id;
