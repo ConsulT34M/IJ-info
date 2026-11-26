@@ -34,3 +34,7 @@ __pycache__/
 
 # 웹서버 로컬 인증서(자체 서명). active.conf는 지금 어떤 설정인지 보여야 하므로 추적한다.
 ops/certs/
+
+# 실제 얼굴 사진은 커밋하지 않는다. 설명 파일만 추적한다.
+samples/faces/*
+!samples/faces/README.md

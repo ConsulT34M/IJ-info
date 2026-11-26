@@ -8,6 +8,7 @@ from app.common.face import (
     DEFAULT_SIMILARITY,
     MISMATCH_SIMILARITY,
     FakeFaceMatcher,
+    LocalFaceMatcher,
     RekognitionFaceMatcher,
     build_face_matcher,
     get_face_matcher,
@@ -124,12 +125,149 @@ def test_fake_face_matcher_rules():
     assert two.face_count == 2 and two.matched is False
 
 
-def test_rekognition_matcher_is_interface_only():
-    matcher = RekognitionFaceMatcher()
-    with pytest.raises(NotImplementedError):
-        matcher.detect_face_count(b"x")
-    with pytest.raises(NotImplementedError):
-        matcher.compare_faces(b"a", b"b")
+# ---------------------------------------------------------------- Rekognition
+#
+# AWS 없이 확인한다. boto3 클라이언트 자리에 가짜를 끼워 **요청 모양과 판정**을 본다.
+# 시연 때 실제로 도는 구현이라 여기서 막아 두는 값이 크다(D93).
+
+
+class _FakeRekognition:
+    """boto3 rekognition 클라이언트 흉내."""
+
+    def __init__(self, faces=1, similarity=None, error_code=None):
+        self.faces = faces
+        self.similarity = similarity
+        self.error_code = error_code
+        self.calls = []
+
+    def _maybe_raise(self):
+        if self.error_code:
+            raise _AwsError(self.error_code)
+
+    def detect_faces(self, **kwargs):
+        self.calls.append(("detect_faces", kwargs))
+        self._maybe_raise()
+        return {"FaceDetails": [{"Confidence": 99.9}] * self.faces}
+
+    def compare_faces(self, **kwargs):
+        self.calls.append(("compare_faces", kwargs))
+        self._maybe_raise()
+        if self.similarity is None:
+            return {"FaceMatches": [], "UnmatchedFaces": [{}]}
+        return {"FaceMatches": [{"Similarity": self.similarity}]}
+
+
+class _AwsError(Exception):
+    def __init__(self, code):
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+def test_rekognition_counts_faces():
+    client = _FakeRekognition(faces=2)
+    assert RekognitionFaceMatcher(client=client).detect_face_count(b"img") == 2
+
+
+def test_rekognition_judges_with_our_own_threshold():
+    """SimilarityThreshold=0 으로 받아 와서 판정은 우리가 한다(증적에 유사도를 남기려고)."""
+    client = _FakeRekognition(similarity=93.5)
+    result = RekognitionFaceMatcher(client=client).compare_faces(b"id", b"selfie", threshold=90)
+
+    assert result.matched is True and result.similarity == 93.5
+    sent = dict(client.calls[-1][1])
+    assert sent["SimilarityThreshold"] == 0
+    assert sent["SourceImage"] == {"Bytes": b"id"}
+    assert sent["TargetImage"] == {"Bytes": b"selfie"}
+
+
+def test_rekognition_below_threshold_is_not_a_match():
+    client = _FakeRekognition(similarity=71.0)
+    result = RekognitionFaceMatcher(client=client).compare_faces(b"id", b"selfie", threshold=90)
+    assert result.matched is False and result.similarity == 71.0
+
+
+def test_rekognition_no_match_reports_zero():
+    client = _FakeRekognition(similarity=None)
+    result = RekognitionFaceMatcher(client=client).compare_faces(b"id", b"selfie")
+    assert result.similarity == 0.0 and result.matched is False
+
+
+def test_rekognition_counts_zero_faces_for_a_non_image():
+    """이미지가 아니면 AWS가 거부한다. 얼굴 0개로 본다(→ E04)."""
+    client = _FakeRekognition(error_code="InvalidImageFormatException")
+    assert RekognitionFaceMatcher(client=client).detect_face_count(b"dog") == 0
+
+
+def test_rekognition_two_faces_short_circuits_without_comparing():
+    """셀카에 얼굴이 둘이면 대조까지 가지 않는다(E04)."""
+    client = _FakeRekognition(faces=2)
+    result = RekognitionFaceMatcher(client=client).compare_faces(b"id", b"selfie")
+    assert result.face_count == 2 and result.matched is False
+    assert [name for name, _ in client.calls] == ["detect_faces"]
+
+
+def test_rekognition_id_card_without_a_face_is_not_a_match():
+    """신분증에서 얼굴을 못 찾으면 CompareFaces가 거부한다. 대조 불가 → 불일치."""
+
+    class _OnlyCompareFails(_FakeRekognition):
+        def compare_faces(self, **kwargs):
+            raise _AwsError("InvalidParameterException")
+
+    result = RekognitionFaceMatcher(client=_OnlyCompareFails()).compare_faces(b"id", b"selfie")
+    assert result.face_count == 1 and result.similarity is None and result.matched is False
+
+
+def test_rekognition_lets_unexpected_errors_through():
+    """권한 오류 같은 건 삼키지 않는다. 조용히 '불일치'로 끝나면 안 된다."""
+    client = _FakeRekognition(error_code="AccessDeniedException")
+    with pytest.raises(_AwsError):
+        RekognitionFaceMatcher(client=client).detect_face_count(b"img")
+
+
+def test_rekognition_rejects_an_oversized_image():
+    big = b"x" * (RekognitionFaceMatcher.MAX_IMAGE_BYTES + 1)
+    with pytest.raises(ValueError):
+        RekognitionFaceMatcher(client=_FakeRekognition()).detect_face_count(big)
+
+
+def test_rekognition_ignores_the_filename_hint():
+    """파일명을 믿으면 그 자체가 취약점이다. 어떤 힌트를 줘도 결과가 같아야 한다."""
+    matcher = RekognitionFaceMatcher(client=_FakeRekognition(similarity=95.0))
+    plain = matcher.compare_faces(b"id", b"selfie", threshold=90)
+    hinted = matcher.compare_faces(b"id", b"selfie", hint="noface_mismatch.png", threshold=90)
+    assert plain == hinted and hinted.matched is True
+
+
+# ---------------------------------------------------------------- Local(OpenCV)
+
+cv2 = pytest.importorskip("cv2", reason="LocalFaceMatcher는 opencv-python-headless가 필요하다")
+
+
+def test_local_matcher_finds_no_face_in_a_non_image():
+    assert LocalFaceMatcher().detect_face_count(b"definitely not an image") == 0
+    assert LocalFaceMatcher().detect_face_count(b"") == 0
+
+
+def test_local_matcher_finds_no_face_in_the_synthetic_samples():
+    """저장소 샘플은 합성 단색 이미지라 얼굴이 없다.
+
+    그래서 FACE_MATCHER=local 로 두면 샘플만으로는 전 건이 E04가 된다.
+    local 모드를 쓰려면 **실제 얼굴 사진**이 필요하다(D93).
+    """
+    assert LocalFaceMatcher().detect_face_count(sample_png()) == 0
+
+
+def test_local_matcher_ignores_the_filename_hint():
+    matcher = LocalFaceMatcher()
+    data = sample_png()
+    assert matcher.detect_face_count(data, hint="selfie.png") == matcher.detect_face_count(
+        data, hint="noface.png"
+    )
+
+
+def test_local_matcher_reports_no_match_when_there_is_no_face():
+    result = LocalFaceMatcher().compare_faces(sample_png(), sample_png(), threshold=90)
+    assert result.face_count == 0 and result.similarity is None and result.matched is False
 
 
 def test_upload_accepts_png_and_jpg():

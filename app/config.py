@@ -72,7 +72,13 @@ class Config:
     LIBRARY_DIR = "samples/library"
 
     STORAGE_BACKEND = "local"                     # local | s3(AWS 배포 단계)
-    FACE_MATCHER = "fake"                         # fake | rekognition(AWS 배포 단계)
+    # fake  : 파일명 힌트로 판정(시연·테스트 전용). 강아지 사진도 통과한다
+    # local : OpenCV로 실제 얼굴 검출. 실제 얼굴 사진이 필요하다(D93)
+    # rekognition : AWS Rekognition CompareFaces (배포 후)
+    FACE_MATCHER = "fake"
+    # local 모드 전용 임계값. Rekognition과 점수 체계가 달라 따로 둔다(D93).
+    FACE_LOCAL_THRESHOLD = 80
+    AWS_REGION = "ap-northeast-2"
     CI_RETENTION_AFTER_DELIVERY = timedelta(days=7)    # 첫 수령 후 7일
     CI_RETENTION_WITHOUT_DELIVERY = timedelta(days=30)  # 미수령 시 판정 후 30일
     ADMIN_MAX_FAILED = 5                          # 관리자 5회 실패
@@ -136,6 +142,11 @@ def init_app_config(app, overrides: dict | None = None) -> None:
         PUBLIC_BASE_URL=os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:8000"),
         CARRIER_BASE_URL=os.environ.get("CARRIER_BASE_URL", "https://localhost:8443"),
         CARRIER_CA_BUNDLE=os.environ.get("CARRIER_CA_BUNDLE", "carrier/certs/carrier.crt"),
+        # 배포 단계에서 .env 로 갈아 끼운다. 기본값은 위 Config 클래스에 있다.
+        STORAGE_BACKEND=os.environ.get("STORAGE_BACKEND", Config.STORAGE_BACKEND),
+        FACE_MATCHER=os.environ.get("FACE_MATCHER", Config.FACE_MATCHER),
+        FACE_LOCAL_THRESHOLD=env_int("FACE_LOCAL_THRESHOLD", Config.FACE_LOCAL_THRESHOLD),
+        AWS_REGION=os.environ.get("AWS_REGION", Config.AWS_REGION),
         # D22: 로컬 http 개발에서만 Secure를 끈다. production은 반드시 True.
         SESSION_COOKIE_SECURE=env_bool("SESSION_COOKIE_SECURE", not is_dev),
         WTF_CSRF_SSL_STRICT=not is_dev,

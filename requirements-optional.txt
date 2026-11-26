@@ -1,0 +1,14 @@
+# 선택 의존성. 기본 설치(requirements.txt)에는 넣지 않는다.
+#
+#   uv pip install -r requirements-optional.txt
+#
+# FACE_MATCHER 기본값은 fake 라서 아래가 없어도 전부 돌아간다.
+# 얼굴 대조를 실제로 확인하거나 AWS에 올릴 때만 설치한다(D93).
+
+# FACE_MATCHER=local  — OpenCV로 실제 얼굴 검출
+#   OpenCV 5부터 CascadeClassifier가 기본 네임스페이스에서 빠져 4.x로 고정한다.
+opencv-python-headless>=4.8,<5
+
+# FACE_MATCHER=rekognition, STORAGE_BACKEND=s3  — AWS 배포 단계
+#   자격증명은 EC2 인스턴스의 IAM 역할에서 온다. 키를 코드·환경변수에 두지 않는다.
+boto3>=1.35

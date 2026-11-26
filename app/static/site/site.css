@@ -100,7 +100,8 @@ img, svg { max-width: 100%; }
 .brand-sub {
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: .14em;
+  /* IJ-info 는 혼합 대소문자다. 대문자 전용 자간(.14em)은 너무 벌어진다. */
+  letter-spacing: .06em;
   color: var(--ij-green);
 }
 
