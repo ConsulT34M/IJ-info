@@ -28,6 +28,15 @@ from app.common.client_ip import client_ip
 from app.common.crypto import sha256_hex
 from app.common.log_mask import mask_name, mask_phone, unmasked_logger
 from app.common import secrets as secret_store
+from app.common.phone_flow import (
+    consume_code,
+    ensure_phone_row,
+    ensure_test_phone,
+    issue_block_reason,
+    issue_code,
+    match_failure,
+    receive_ci,
+)
 from app.common.phone import (
     code_mac,
     decrypt_match_token,
@@ -178,7 +187,7 @@ def phone_otp():
     재발송은 resend=1로 보내고 서버 세션의 성명·번호를 재사용한다(D6, 명의 대조는 다시 하지 않는다).
     """
     verification = g.verification
-    phone_row = _ensure_phone_row(verification)
+    phone_row = ensure_phone_row(verification)
     resend = request.form.get("resend") == "1"
 
     if resend:
@@ -223,8 +232,10 @@ def phone_otp():
                 terminate(verification, "P01")
                 end_session()
                 return redirect(verification.return_url)
-            message, status = _match_failure_response(
-                result.reason, current_app.config["MATCH_MAX_ATTEMPTS"] - attempts
+            message, status = match_failure(
+                result.reason,
+                current_app.config["MATCH_MAX_ATTEMPTS"] - attempts,
+                good_status=200,  # 인증창은 입력 화면을 다시 그린다
             )
             return _render_phone_form(
                 verification, error=message, status=status, name=name, phone_number=number
@@ -236,8 +247,8 @@ def phone_otp():
         db.session.commit()
 
     otp_row = db.session.get(PhoneOtp, verification.id)
-    test_phone = _ensure_test_phone(number)
-    blocked = _issue_block_reason(otp_row, test_phone)
+    test_phone = ensure_test_phone(number)
+    blocked = issue_block_reason(otp_row, test_phone)
     if blocked is not None:
         message = (
             f"인증번호는 건당 {current_app.config['OTP_MAX_ISSUES']}회까지 받을 수 있습니다."
@@ -248,7 +259,7 @@ def phone_otp():
             return _render_phone_form(verification, error=message, status=429)
         return _render_otp_form(verification, otp_row, error=message, status=429)
 
-    otp_row = _issue_code(verification, otp_row, number, test_phone)
+    otp_row = issue_code(verification, otp_row, number, test_phone)
     db.session.commit()
     current_app.logger.info(
         "OTP 발송: verification_id=%s issue_no=%s", verification.id, otp_row.issue_no
@@ -271,7 +282,7 @@ def otp_page():
 def phone_confirm():
     """IA-06. 인증번호를 확인하고 CI를 받는다(MC-02) → stage=ID_CARD."""
     verification = g.verification
-    phone_row = _ensure_phone_row(verification)
+    phone_row = ensure_phone_row(verification)
     otp_row = db.session.get(PhoneOtp, verification.id)
 
     if otp_row is None:
@@ -290,17 +301,7 @@ def phone_confirm():
         return _render_otp_form(verification, otp_row, error="인증번호 6자리를 입력해 주세요.", status=400)
 
     # 성공 1회만: 조건부 원자적 UPDATE로 검증과 폐기를 함께 한다(D46)
-    consumed = db.session.execute(
-        db.update(PhoneOtp)
-        .where(
-            PhoneOtp.verification_id == verification.id,
-            PhoneOtp.code_mac == code_mac(verification.id, code),
-            PhoneOtp.code_expires_at > now_utc(),
-        )
-        .values(code_mac=None, inbox_ciphertext=None)
-    )
-
-    if consumed.rowcount != 1:
+    if not consume_code(verification, code):
         db.session.rollback()
         # UPDATE가 0행이라고 해서 전부 '틀린 번호'는 아니다(D88). 같은 번호가 동시에
         # 들어오거나 확인 버튼을 두 번 누르면 한쪽만 성공하고, 진 쪽도 여기로 온다.
@@ -339,8 +340,10 @@ def phone_confirm():
         abort(503, description="처리 중 문제가 발생했습니다. 이용하시던 서비스에서 다시 시작해 주세요.")
 
     try:
-        ci = carrier.issue_ci(
-            verification.id, decrypt_match_token(verification.id, phone_row.match_token_enc)
+        receive_ci(
+            verification,
+            phone_row,
+            decrypt_match_token(verification.id, phone_row.match_token_enc),
         )
     except carrier.CarrierError as exc:
         current_app.logger.warning("MC-02 실패: verification_id=%s 사유=%s", verification.id, exc)
@@ -348,11 +351,6 @@ def phone_confirm():
         end_session()
         abort(503, description="통신사 응답이 없습니다. 잠시 후 이용하시던 서비스에서 다시 시작해 주세요.")
 
-    phone_row.ci = ci
-    phone_row.status = "PASSED"
-    phone_row.completed_at = now_utc()
-    phone_row.match_token_enc = None  # CI 발급 후 폐기
-    log_phone_event(verification.id, "CI_ISSUED")
     advance_stage(verification, "ID_CARD")
     db.session.commit()
     current_app.logger.info("CI 수령: verification_id=%s", verification.id)
@@ -710,98 +708,9 @@ def _render_id_confirm(verification: Verification, *, error: str | None = None):
     )
 
 
-def _ensure_phone_row(verification: Verification) -> PhoneVerification:
-    """휴대폰 단계 행을 만들거나 가져온다."""
-    row = db.session.get(PhoneVerification, verification.id)
-    if row is None:
-        row = PhoneVerification(verification_id=verification.id)
-        db.session.add(row)
-        db.session.flush()
-    return row
 
 
-def _ensure_test_phone(number: str) -> TestPhone:
-    """번호 단위 발송 제한(D11)에 쓸 행. 명부에 없는 번호면 읽을 수 없는 수신함으로 만든다."""
-    key = phone_key(number)
-    row = db.session.get(TestPhone, key)
-    if row is None:
-        current_app.logger.warning(
-            "테스트 수신함에 없는 번호다. 발송 제한만 적용한다: %s", mask_phone(number)
-        )
-        row = TestPhone(
-            phone_key=key,
-            phone_mask=mask_phone(number),
-            inbox_key_hash=sha256_hex(token_urlsafe(32)),
-        )
-        db.session.add(row)
-        db.session.flush()
-    return row
 
-
-def _issue_block_reason(otp_row: PhoneOtp | None, test_phone: TestPhone) -> str | None:
-    """발송을 막아야 하는 이유(D11). 없으면 None."""
-    if otp_row is not None:
-        if otp_row.issue_no >= current_app.config["OTP_MAX_ISSUES"]:
-            return "MAX_ISSUES"
-        if not is_expired(otp_row.issued_at + current_app.config["OTP_RESEND_INTERVAL"]):
-            return "INTERVAL"
-    if test_phone.next_issue_at and not is_expired(test_phone.next_issue_at):
-        return "INTERVAL"
-    return None
-
-
-def _issue_code(
-    verification: Verification,
-    otp_row: PhoneOtp | None,
-    number: str,
-    test_phone: TestPhone,
-) -> PhoneOtp:
-    """인증번호를 만들어 검증값·수신함 암호문을 저장한다."""
-    code = generate_code()
-    issued_at = now_utc()
-    expires_at = issued_at + current_app.config["OTP_TTL"]
-
-    if otp_row is None:
-        otp_row = PhoneOtp(
-            verification_id=verification.id,
-            phone_key=phone_key(number),
-            issue_no=1,
-            issued_at=issued_at,
-            code_expires_at=expires_at,
-        )
-        db.session.add(otp_row)
-        event_kind = "OTP_ISSUED"
-    else:
-        otp_row.issue_no += 1
-        otp_row.phone_key = phone_key(number)
-        otp_row.issued_at = issued_at
-        otp_row.code_expires_at = expires_at
-        event_kind = "OTP_REISSUED"
-
-    otp_row.code_mac = code_mac(verification.id, code)
-    otp_row.inbox_ciphertext = encrypt_for_inbox(verification.id, code)
-    test_phone.next_issue_at = issued_at + current_app.config["OTP_RESEND_INTERVAL"]
-    log_phone_event(verification.id, event_kind)
-
-    if current_app.config.get("VULN_W17"):
-        # VULN_W17: 마스킹 필터를 거치지 않는 로거로 인증번호·번호 원문을 남긴다(실습 전용)
-        unmasked_logger().debug(
-            "otp issued verification_id=%s phone_number=%s code=%s",
-            verification.id,
-            number,
-            code,
-        )
-
-    return otp_row
-
-
-def _match_failure_response(reason: str | None, remaining: int) -> tuple[str, int]:
-    """D1: 기본(양호)은 사유 구분 없이 같은 메시지·같은 상태 코드를 쓴다."""
-    if current_app.config.get("VULN_W14"):
-        if reason == carrier.REASON_NOT_SUBSCRIBER:
-            return ("등록되지 않은 휴대폰번호입니다.", 404)
-        return ("입력하신 성명이 명의자와 다릅니다.", 400)
-    return (f"성명 또는 휴대폰번호가 일치하지 않습니다. (남은 횟수 {remaining}회)", 200)
 
 
 def _render_phone_form(

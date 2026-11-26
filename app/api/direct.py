@@ -35,13 +35,42 @@ from app.common.decision import (
 )
 from app.common.face import get_face_matcher
 from app.api.auth import require_client_auth
-from app.common.phone import validate_name
+from app.common import carrier
+from app.common.audit import log_phone_event
+from app.common.log_mask import mask_name, mask_phone
+from app.common.phone import (
+    decrypt_match_token,
+    encrypt_match_token,
+    normalize_phone,
+    phone_key,
+    validate_name,
+)
+from app.common.phone_flow import (
+    consume_code,
+    ensure_phone_row,
+    ensure_test_phone,
+    issue_block_reason,
+    issue_code,
+    match_failure,
+    receive_ci,
+)
+from app.common.stage import advance_stage
+from app.common.timeutil import kst_isoformat
 from app.common.rrn import validate_issue_date, validate_rrn
 from app.common.storage import StorageError, get_storage
 from app.common.timeutil import is_expired, now_utc
 from app.common.upload import validate_image_upload
 from app.mock_mois import verify as mois_verify
-from app.models import Consent, FaceCheck, IdDocument, Verification, db
+from app.models import (
+    Consent,
+    FaceCheck,
+    IdDocument,
+    PhoneOtp,
+    PhoneVerification,
+    TestPhone,
+    Verification,
+    db,
+)
 from app.verify.termination import terminate
 
 CI_LENGTH = 88
@@ -166,9 +195,15 @@ def submit_id_card(verification_id):
     if name is None:
         abort(400, description="name이 필요합니다.")
 
-    ci = payload.get("ci")
-    if not isinstance(ci, str) or len(ci) != CI_LENGTH:
-        abort(400, description=f"ci가 필요합니다({CI_LENGTH}자). 휴대폰 본인확인에서 받은 값입니다.")
+    # CI는 A사가 휴대폰 단계(IA-24)에서 통신사에게 받아 보관한 값만 쓴다(D98).
+    # 위탁사가 보내는 CI는 받지 않는다 — 받으면 X-01이 "같은 키로 같은 주민번호를
+    # 두 번 계산해 비교하는" 항등식이 되어 검사 구실을 못 한다.
+    if "ci" in payload:
+        abort(400, description="ci는 더 이상 받지 않습니다. 휴대폰 본인확인(IA-23·IA-24)을 거쳐 주세요.")
+    phone_row = db.session.get(PhoneVerification, verification.id)
+    if phone_row is None or phone_row.status != "PASSED" or not phone_row.ci:
+        abort(409, description="휴대폰 본인확인을 먼저 끝내 주세요.")
+    ci = phone_row.ci
 
     upload, upload_error = _decode_image(payload)
     if upload is None:
@@ -221,7 +256,7 @@ def submit_id_card(verification_id):
     document.birth_date = rrn_check.birth_date
     document.issue_date = issue_check.issue_date
 
-    # X-01: 위탁사가 보낸 CI와 제출된 주민번호로 계산한 CI를 대조한다(W-13)
+    # X-01: 통신사가 발급한 CI(휴대폰 명의자)와 제출된 주민번호로 계산한 CI를 대조한다(W-13)
     if not ci_matches(ci_mock(rrn_check.rrn, secret_store.get_key("ekyc/ci-key")), ci):
         document.ci_matched = False
         log_access(
@@ -374,3 +409,220 @@ def _parse_time(value) -> datetime | None:
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(tz=None).replace(tzinfo=None)
     return parsed
+
+
+# ----------------------------------------------------------- IA-23 / IA-24
+#
+# 휴대폰 본인확인을 A사로 되돌린다(D98).
+#
+# 전에는 위탁사가 인증번호를 만들고 검증한 뒤 CI까지 계산해서 IA-21에 실어 보냈다.
+# 그러면 X-01(휴대폰 명의자 = 신분증 명의자)이 **구조적으로 항상 통과한다** —
+# 대조할 두 값이 같은 키·같은 주민번호에서 나오기 때문이다. 검사가 아니라 항등식이다.
+# 거래소 요구사항 정의서 FR-001도 "A는 이름·휴대폰번호를 대조하고 인증번호를 검증해야
+# 한다"로 돼 있다.
+#
+# 그래서 CI 공유키는 A사와 모의 통신사만 갖는다. 위탁사는 CI를 보지도 만들지도 않는다.
+#
+# 인증번호를 **만드는 주체도 A사다.** 모의 통신사는 명의 대조(MC-01)와 CI 발급(MC-02)만
+# 한다. 실제 휴대폰 본인확인에서도 본인확인기관이 발송 주체이고 통신사는 명의를 확인해
+# 준다. 위탁사는 인증번호를 받지 못한다 — 받으면 그 자체가 오라클이다.
+
+
+def _phone_stage(verification: Verification):
+    """휴대폰 단계에서만 받는다. 이미 지났으면 무엇이 잘못됐는지 알려 준다."""
+    if verification.stage == "PHONE":
+        return
+    if verification.stage in ("ID_CARD", "ID_CONFIRM", "FACE", "DONE"):
+        abort(409, description="휴대폰 본인확인이 이미 끝난 건입니다.")
+    abort(403, description="지금 단계에서 받을 수 없는 요청입니다.")
+
+
+@bp.post("/verifications/<uuid:verification_id>/phone/otp")
+@require_client_auth
+def request_phone_otp(verification_id):
+    """IA-23. 명의 대조(MC-01) 후 인증번호를 발송한다.
+
+    응답에 인증번호를 넣지 않는다. 이용자는 본인 휴대폰(모의 PASS 앱 / 테스트 수신함)에서
+    확인한다. 재발송은 resend=true로 보내고 직전 성명·번호를 재사용한다(D6).
+    """
+    verification = _load_direct(verification_id)
+    _phone_stage(verification)
+    payload = _json_body()
+    phone_row = ensure_phone_row(verification)
+    resend = payload.get("resend") is True
+
+    otp_row = db.session.get(PhoneOtp, verification.id)
+
+    name = validate_name(payload.get("name"))
+    number = normalize_phone(payload.get("phone_number"))
+    if name is None or number is None:
+        abort(400, description="성명과 휴대폰번호 형식을 확인해 주세요.")
+
+    if resend:
+        # D6: 재발송은 명의 대조를 다시 하지 않는다. 번호 원문을 저장하지 않으므로
+        # 위탁사가 같은 값을 다시 보내고, A사는 phone_key로 같은 번호인지만 확인한다.
+        if otp_row is None or phone_row.match_token_enc is None:
+            abort(409, description="먼저 성명과 휴대폰번호로 인증번호를 요청해 주세요.")
+        if otp_row.phone_key != phone_key(number):
+            abort(400, description="처음 보낸 휴대폰번호와 다릅니다.")
+    else:
+        try:
+            result = carrier.identity_match(verification.id, name, number)
+        except carrier.CarrierError as exc:
+            current_app.logger.warning("MC-01 실패: verification_id=%s 사유=%s", verification.id, exc)
+            terminate(verification, "P05")
+            abort(503, description="통신사 응답이 없습니다. 잠시 후 다시 시작해 주세요.")
+
+        phone_row.match_attempts += 1
+        log_phone_event(
+            verification.id,
+            "IDENTITY_MATCH",
+            result_code=None if result.matched else "P01",
+            name_mask=mask_name(name),
+            phone_mask=mask_phone(number),
+        )
+
+        if not result.matched:
+            verification.last_error_code = "P01"  # D8
+            attempts = phone_row.match_attempts
+            maximum = current_app.config["MATCH_MAX_ATTEMPTS"]
+            db.session.commit()
+            if attempts >= maximum:
+                terminate(verification, "P01")
+                return _result_response(verification, 409)
+            message, status = match_failure(result.reason, maximum - attempts, good_status=400)
+            return (
+                jsonify(
+                    verification_id=str(verification.id),
+                    stage=verification.stage,
+                    passed=False,
+                    reason_code="P01",
+                    message=message,
+                    attempts_left=maximum - attempts,
+                ),
+                status,
+            )
+
+        phone_row.match_token_enc = encrypt_match_token(verification.id, result.match_token)
+        db.session.commit()
+
+    test_phone = ensure_test_phone(number)
+    blocked = issue_block_reason(otp_row, test_phone)
+    if blocked is not None:
+        message = (
+            f"인증번호는 건당 {current_app.config['OTP_MAX_ISSUES']}회까지 받을 수 있습니다."
+            if blocked == "MAX_ISSUES"
+            else "잠시 후 다시 요청해 주세요. (60초 제한)"
+        )
+        abort(429, description=message)
+
+    otp_row = issue_code(verification, otp_row, number, test_phone)
+    db.session.commit()
+    current_app.logger.info(
+        "IA-23 인증번호 발송: verification_id=%s issue_no=%s", verification.id, otp_row.issue_no
+    )
+    return (
+        jsonify(
+            verification_id=str(verification.id),
+            stage=verification.stage,
+            phone_mask=mask_phone(number),
+            code_expires_at=kst_isoformat(otp_row.code_expires_at),
+            resend_available_at=kst_isoformat(
+                otp_row.issued_at + current_app.config["OTP_RESEND_INTERVAL"]
+            ),
+            issues_left=current_app.config["OTP_MAX_ISSUES"] - otp_row.issue_no,
+            message="이용자 휴대폰으로 인증번호를 보냈습니다.",
+        ),
+        200,
+    )
+
+
+@bp.post("/verifications/<uuid:verification_id>/phone/confirm")
+@require_client_auth
+def confirm_phone_otp(verification_id):
+    """IA-24. 인증번호를 확인하고 CI를 받는다(MC-02) → stage=ID_CARD.
+
+    CI는 응답에 넣지 않는다. A사 안에만 둔다.
+    """
+    verification = _load_direct(verification_id)
+    payload = _json_body()
+    phone_row = ensure_phone_row(verification)
+
+    # 이미 끝난 휴대폰 단계에 다시 오는 요청은 멱등으로 받는다. 위탁사가 응답을 못 받고
+    # 재전송하는 경우다 — 여기서 409를 내면 멀쩡한 건이 막힌다. 시도 횟수는 올리지 않는다.
+    if verification.stage != "PHONE" and phone_row.status == "PASSED":
+        return jsonify(
+            verification_id=str(verification.id),
+            stage=verification.stage,
+            passed=True,
+            phone="PASSED",
+            message="휴대폰 본인확인은 이미 끝났습니다.",
+        )
+    _phone_stage(verification)
+    otp_row = db.session.get(PhoneOtp, verification.id)
+
+    if otp_row is None:
+        abort(409, description="인증번호를 먼저 요청해 주세요.")
+
+    code = str(payload.get("code") or "").strip()
+    if not code.isdigit() or len(code) != 6:
+        # 형식 오류는 불일치가 아니므로 시도 횟수에 넣지 않는다
+        abort(400, description="인증번호 6자리를 보내 주세요.")
+
+    if not consume_code(verification, code):
+        db.session.rollback()
+        fresh = db.session.get(PhoneOtp, verification.id)
+        if fresh is None or fresh.code_mac is None:
+            # 이미 쓰인 번호다(동시 제출). 틀린 번호가 아니므로 횟수를 올리지 않는다(D88).
+            abort(409, description="이미 사용된 인증번호입니다. 잠시 후 상태를 확인해 주세요.")
+        if is_expired(fresh.code_expires_at):
+            abort(400, description="인증번호 유효시간이 지났습니다. 재발송해 주세요.")
+
+        phone_row.otp_attempts += 1
+        attempts = phone_row.otp_attempts
+        maximum = current_app.config["OTP_MAX_ATTEMPTS"]
+        db.session.commit()
+        if attempts >= maximum:
+            terminate(verification, "P02")
+            return _result_response(verification, 409)
+        return (
+            jsonify(
+                verification_id=str(verification.id),
+                stage=verification.stage,
+                passed=False,
+                reason_code="P02",
+                message=f"인증번호가 일치하지 않습니다. (남은 횟수 {maximum - attempts}회)",
+                attempts_left=maximum - attempts,
+            ),
+            400,
+        )
+
+    log_phone_event(verification.id, "OTP_VERIFIED")
+    db.session.commit()
+
+    if phone_row.match_token_enc is None:
+        current_app.logger.error("대조 토큰이 없다: verification_id=%s", verification.id)
+        terminate(verification, "P05")
+        abort(503, description="처리 중 문제가 발생했습니다. 새로 요청해 주세요.")
+
+    try:
+        receive_ci(
+            verification,
+            phone_row,
+            decrypt_match_token(verification.id, phone_row.match_token_enc),
+        )
+    except carrier.CarrierError as exc:
+        current_app.logger.warning("MC-02 실패: verification_id=%s 사유=%s", verification.id, exc)
+        terminate(verification, "P05")
+        abort(503, description="통신사 응답이 없습니다. 잠시 후 다시 시작해 주세요.")
+
+    advance_stage(verification, "ID_CARD")
+    db.session.commit()
+    current_app.logger.info("IA-24 CI 수령: verification_id=%s", verification.id)
+    return jsonify(
+        verification_id=str(verification.id),
+        stage=verification.stage,
+        passed=True,
+        phone="PASSED",
+        message="휴대폰 본인확인이 끝났습니다. 신분증을 제출해 주세요.",
+    )

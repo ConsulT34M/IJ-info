@@ -114,8 +114,8 @@ def create_verification():
         client_id=g.client.id,
         client_user_ref=client_user_ref,
         mode=mode,
-        # DIRECT는 동의·휴대폰 단계가 위탁사에 있으므로 신분증 단계에서 시작한다
-        stage="ID_CARD" if mode == "DIRECT" else "CONSENT",
+        # DIRECT는 동의 화면만 위탁사에 있다. 휴대폰 본인확인은 A사가 한다(D98).
+        stage="PHONE" if mode == "DIRECT" else "CONSENT",
         return_url=return_url,
         created_at=created,
         expires_at=created + current_app.config["VERIFICATION_TTL"],
