@@ -869,8 +869,7 @@ inline `<script>`를 쓸 수 없고, 쓰면 화면이 조용히 깨진다. `app/
 | http 평문 접속 | 301 → https | **200 (평문 서비스)** |
 | 에러 화면에 버전 | 없음 | **`Apache/2.4.71 (Unix) OpenSSL/3.5.9`** |
 | 숨김 파일 `.env` | 403 | **200 (내용 그대로)** |
-| TRACE 메서드 | 403 | **200** |
-| PUT 메서드 | 403 | 405 (백엔드까지 전달) |
+| TRACE 메서드 | 405 | **200** |
 | Server 헤더 | `Apache` | **`gunicorn`** (백엔드 노출) |
 
 그 밖에 양호본에만 있는 것: 쓰기 메서드 차단(`LimitExcept`), 요청 크기·시간 제한,
@@ -1017,21 +1016,39 @@ inline `<script>`를 쓸 수 없고, 쓰면 화면이 조용히 깨진다. `app/
 즉 이 블록 하나가 **vhost 안의 모든 Directory·Files 단위 `Require`를 GET에 한해
 조용히 무력화**하고 있었다. `Options` 같은 비-인가 지시어는 멀쩡히 동작해서 더 안 보였다.
 
-### 고친 방법
+### 고친 방법 — 설정을 줄였다
 
-메서드 제한을 `mod_rewrite`로 옮겼다. 인가 병합을 건드리지 않는다.
+처음에는 메서드 제한을 `mod_rewrite`로 옮겼다. 동작은 했지만 **설정을 하나 더 얹는 방식**이라,
+"내가 이해하지 못하는 취약점을 만들지 말자"는 판단에 따라 **덜어내는 쪽**으로 다시 갔다.
 
-```apache
-RewriteEngine On
-RewriteCond %{REQUEST_METHOD} !^(GET|POST|HEAD)$
-RewriteRule .* - [F]
+- `<Location "/">` + `<LimitExcept>` **삭제**. 대신 `TraceEnable Off`로 TRACE를 막고,
+  PUT·DELETE는 백엔드(Flask)가 405로 거절한다. 라우트가 GET/POST만 선언하기 때문이다.
+  **따로 막을 설정이 필요 없었다.**
+- `mod_rewrite` 메서드 필터도 **넣지 않았다.** 위와 중복이다.
+- `LimitRequestFields`·`LimitRequestFieldSize`·`LimitRequestLine`, `SSLCompression`,
+  `ErrorDocument 400`도 뺐다. 기본값과 같거나 확인할 수 없는 것들이다.
+- **vhost 안의 Location 계열 섹션을 하나(`<LocationMatch>`)로 유지한다.** 둘 이상 두면
+  병합 순서 문제가 다시 생긴다. 설정 파일 머리말에 이 규칙을 적었다.
+
+지시어 66줄 → 54줄. 확인: `<Directory>`를 `Require all denied`로 바꾸면 이제 **403**이
+나온다(전에는 200). 인가가 다시 살아났다.
+
+### 그래서 만든 것 — `ops/check_web.sh`
+
+이번 일의 교훈은 "설정 파일에 지시어가 있다고 그게 먹는다는 보장이 없다"이다.
+그래서 **양호본의 지시어마다 실제 요청을 보내 확인하는 스크립트**를 뒀다.
+
+```
+ops/check_web.sh          양호 기준 9항목
+ops/check_web.sh --vuln   취약 기준 7항목
 ```
 
-`<LocationMatch>` 뒤로 옮기는 것만으로도 동작하지만, **순서에 의존하는 설정은 함정**이다.
-나중에 누가 `<Directory>` 보호를 추가하면 조용히 안 먹는다. 원인을 없애는 쪽을 골랐다.
+만들자마자 하나 잡았다. `TraceEnable Off`는 **405**를 내는데 403을 기대하고 있었다
+(403은 앞서 넣었던 rewrite 규칙이 내던 값이다). 설정이 아니라 **내 기대가 틀렸던 것**이고,
+스크립트가 없었으면 "403이 나와야 하는데 왜 405지?"를 진단 때 처음 마주쳤을 것이다.
 
-확인: `<Directory>`를 `Require all denied`로 바꾸면 이제 **403**이 나온다(전에는 200).
-인가가 다시 살아난 것이다. 메서드 차단도 PUT·DELETE·TRACE 모두 403으로 더 깔끔해졌다.
+앞으로 양호본에 지시어를 더할 때는 이 스크립트에 점검 항목도 같이 넣는다.
+확인할 수 없는 설정은 넣지 않는다.
 
 ### 진단 관점
 
