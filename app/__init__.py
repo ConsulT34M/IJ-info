@@ -96,9 +96,23 @@ def _register_security_headers(app: Flask) -> None:
 
     @app.after_request
     def _headers(response):
-        response.headers.setdefault("Content-Security-Policy", app.config["CONTENT_SECURITY_POLICY"])
+        local_widget = (
+            app.config["EKYC_ENV"] != "production"
+            and (
+                request.endpoint == "test_inbox.widget"
+                or (request.endpoint == "test_inbox.register_device" and request.args.get("widget") == "1")
+            )
+        )
+        if local_widget:
+            # 인증번호는 IJ-info의 등록된 기기 세션에만 보이고, RKX는 iframe 내용을 읽지 못한다.
+            response.headers["Content-Security-Policy"] = app.config["CONTENT_SECURITY_POLICY"].replace(
+                "frame-ancestors 'none'", "frame-ancestors http://localhost:3000 http://127.0.0.1:3000"
+            )
+            response.headers.pop("X-Frame-Options", None)
+        else:
+            response.headers.setdefault("Content-Security-Policy", app.config["CONTENT_SECURITY_POLICY"])
+            response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cache-Control", "no-store")

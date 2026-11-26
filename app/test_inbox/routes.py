@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import date
 from secrets import token_urlsafe
+from uuid import UUID
 
 from flask import (
     Blueprint,
@@ -37,6 +38,7 @@ from app.common.hmac_auth import ip_allowed
 from app.common.phone import decrypt_from_inbox, normalize_phone, phone_key, validate_name
 from app.common.timeutil import kst_isoformat, now_utc
 from app.models import PhoneOtp, TestPhone, db
+from app.test_inbox.preview import read_preview_token
 
 bp = Blueprint("test_inbox", __name__, url_prefix="/test-inbox")
 
@@ -62,6 +64,65 @@ def inbox_page():
     )
 
 
+@bp.get("/widget")
+def widget():
+    """로컬 시연용 휴대폰 알림. 간편 미리보기 또는 등록된 기기 세션을 쓴다."""
+    if current_app.config["EKYC_ENV"] == "production":
+        abort(404)
+
+    preview = request.args.get("preview")
+    if preview is not None:
+        binding = read_preview_token(preview)
+        otp = None
+        if binding:
+            try:
+                otp = db.session.get(PhoneOtp, UUID(binding[0]))
+            except ValueError:
+                pass
+        if (otp is None or not binding or otp.issue_no != binding[1]
+                or otp.inbox_ciphertext is None or otp.code_expires_at <= now_utc()):
+            return render_template(
+                "test_inbox/widget.html", preview_only=True,
+                error="인증번호가 만료되었습니다. 왼쪽에서 다시 요청해 주세요."
+            ), 410
+        phone = db.session.get(TestPhone, otp.phone_key)
+        return render_template(
+            "test_inbox/widget.html", preview_only=True,
+            code=decrypt_from_inbox(otp.verification_id, otp.inbox_ciphertext),
+            registered_phone=phone.phone_mask if phone else None,
+        )
+
+    registered_phone = session.get(SESSION_PHONE_MASK)
+    inbox_key = session.get(SESSION_INBOX_KEY)
+    code = None
+    if inbox_key:
+        phone = db.session.scalars(
+            db.select(TestPhone).filter_by(inbox_key_hash=sha256_hex(inbox_key))
+        ).one_or_none()
+        if phone is None:
+            registered_phone = None
+        else:
+            otp = db.session.scalars(
+                db.select(PhoneOtp)
+                .where(
+                    PhoneOtp.phone_key == phone.phone_key,
+                    PhoneOtp.inbox_ciphertext.is_not(None),
+                    PhoneOtp.code_expires_at > now_utc(),
+                )
+                .order_by(PhoneOtp.issued_at.desc())
+            ).first()
+            if otp:
+                code = decrypt_from_inbox(otp.verification_id, otp.inbox_ciphertext)
+
+    return render_template(
+        "test_inbox/widget.html",
+        preview_only=False,
+        code=code,
+        registered_phone=registered_phone,
+        error=request.args.get("error"),
+    )
+
+
 def _wants_json() -> bool:
     """모의 PASS 앱은 JSON으로 받고, 브라우저는 화면으로 받는다."""
     accept = request.accept_mimetypes
@@ -72,6 +133,8 @@ def _inbox_error(message: str, status: int, phone_mask: str | None = None):
     """수신함 오류를 요청한 형식으로 돌려준다."""
     if _wants_json():
         return jsonify(error=message, phone_mask=phone_mask), status
+    if request.args.get("widget") == "1" and current_app.config["EKYC_ENV"] != "production":
+        return render_template("test_inbox/widget.html", error=message), status
     return (
         render_template(
             "test_inbox/inbox.html",
@@ -146,27 +209,27 @@ def register_device():
     birth_date = (request.form.get("birth_date") or "").strip()
 
     if phone is None:
-        return jsonify(error="휴대폰번호 형식이 올바르지 않습니다."), 400
+        return _inbox_error("휴대폰번호 형식이 올바르지 않습니다.", 400)
     if name is None:
-        return jsonify(error="성명을 입력해 주세요."), 400
+        return _inbox_error("성명을 입력해 주세요.", 400)
     if not _looks_like_a_date(birth_date):
-        return jsonify(error="생년월일은 YYYY-MM-DD 형식으로 입력해 주세요."), 400
+        return _inbox_error("생년월일은 YYYY-MM-DD 형식으로 입력해 주세요.", 400)
 
     row = db.session.get(TestPhone, phone_key(phone))
     if row is None:
         # 수신함이 없는 번호다. 통신사를 부르기 전에 끊어 호출을 아낀다.
-        return jsonify(error="등록할 수 없습니다. 번호와 명의를 확인해 주세요."), 400
+        return _inbox_error("등록할 수 없습니다. 번호와 명의를 확인해 주세요.", 400)
 
     try:
         result = carrier.register_device(name, phone, birth_date)
     except carrier.CarrierError as exc:
         current_app.logger.warning("MC-03 실패: %s", exc)
-        return jsonify(error="통신사 응답이 없습니다. 통신사 앱이 실행 중인지 확인해 주세요."), 503
+        return _inbox_error("통신사 응답이 없습니다. 통신사 앱이 실행 중인지 확인해 주세요.", 503)
 
     if not result.matched:
         # W-14와 같은 기준: 어느 항목이 틀렸는지 알려주지 않는다
         current_app.logger.info("기기 등록 거부: reason=%s", result.reason)
-        return jsonify(error="등록할 수 없습니다. 번호와 명의를 확인해 주세요."), 403
+        return _inbox_error("등록할 수 없습니다. 번호와 명의를 확인해 주세요.", 403)
 
     inbox_key = token_urlsafe(24)
     row.inbox_key_hash = sha256_hex(inbox_key)
@@ -180,6 +243,8 @@ def register_device():
     # 실제로도 문자는 기기에 오지 저장소 열쇠를 사람이 옮겨 적지 않는다(D99).
     session[SESSION_INBOX_KEY] = inbox_key
     session[SESSION_PHONE_MASK] = row.phone_mask
+    if request.args.get("widget") == "1" and current_app.config["EKYC_ENV"] != "production":
+        return redirect(url_for("test_inbox.widget"))
     return redirect(url_for("test_inbox.inbox_page"))
 
 

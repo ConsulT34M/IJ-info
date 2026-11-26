@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if registered_phone and not code %}<meta http-equiv="refresh" content="2">{% endif %}
+  <title>IJ-info 문자 알림</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='test_inbox_widget.css') }}">
+</head>
+<body>
+  {% if code %}
+  <div class="message" role="status">
+    <p class="sender">IJ-info 본인확인</p>
+    <p>인증번호 <strong class="code">{{ code }}</strong>를 왼쪽 화면에 입력해 주세요.</p>
+    <small>{{ registered_phone }} · 3분간 유효</small>
+  </div>
+  {% elif preview_only %}
+  <div class="message" role="alert"><p class="error">{{ error }}</p></div>
+  {% elif registered_phone %}
+  <div class="message" role="status">
+    <p class="sender">IJ-info 본인확인</p>
+    <p>{{ registered_phone }}로 보낸 인증번호를 기다리는 중입니다.</p>
+  </div>
+  {% else %}
+  <div class="message">
+    <p class="sender">처음 한 번 휴대폰 등록</p>
+    <p class="hint">이 화면에서 휴대폰 명의를 확인하면 인증번호가 바로 표시됩니다.</p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ url_for('test_inbox.register_device', widget=1) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="name" aria-label="성명" placeholder="성명" autocomplete="off" required>
+      <input name="phone_number" type="tel" inputmode="numeric" aria-label="휴대폰번호" placeholder="휴대폰번호" autocomplete="off" required>
+      <input name="birth_date" type="date" aria-label="생년월일" required>
+      <button type="submit">휴대폰 등록</button>
+    </form>
+  </div>
+  {% endif %}
+</body>
+</html>

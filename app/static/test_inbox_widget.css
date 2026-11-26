@@ -1,0 +1,14 @@
+:root{color-scheme:light;font-family:Arial,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:transparent;color:#253124}
+.message{font-size:13px;line-height:1.45}
+.message p{margin:0 0 7px}
+.sender{font-weight:800}
+.code{color:#628f2d;font-size:24px;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+small,.hint{color:#626e62}
+.error{color:#a72b27;font-weight:700}
+form{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}
+input,button{width:100%;min-width:0;height:31px;border:1px solid #c8d9b8;border-radius:7px;padding:5px 7px;font:inherit;font-size:12px;background:#fff}
+input[name=phone_number]{grid-column:2}
+input[name=birth_date]{grid-column:1}
+button{grid-column:2;background:#79aa3e;color:#fff;border-color:#79aa3e;font-weight:800;cursor:pointer}

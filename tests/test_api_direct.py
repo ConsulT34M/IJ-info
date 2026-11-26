@@ -145,6 +145,19 @@ def test_direct_starts_at_the_phone_stage(direct):
     assert direct.row().token_hash is None  # 인증창 토큰을 만들지 않는다
 
 
+def test_local_preview_shows_issued_code_without_device_registration(direct, person, client):
+    issued = direct.otp(person)
+    assert issued.status_code == 200
+    body = issued.get_json()
+    assert "code" not in body
+    token = body["local_preview_token"]
+    page = client.get(f"/test-inbox/widget?preview={token}")
+    assert page.status_code == 200
+    assert direct.inbox_code(person) in page.get_data(as_text=True)
+    assert "휴대폰 등록" not in page.get_data(as_text=True)
+    assert client.get("/test-inbox/widget?preview=invalid").status_code == 410
+
+
 def test_the_two_modes_do_not_share_a_case(api_post):
     """같은 client_user_ref라도 방식이 다르면 다른 건이다."""
     first = api_post(CREATE, {"client_user_ref": "same", "mode": "DIRECT"}).get_json()

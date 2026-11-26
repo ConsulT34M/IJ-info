@@ -71,6 +71,7 @@ from app.models import (
     Verification,
     db,
 )
+from app.test_inbox.preview import issue_preview_token
 from app.verify.termination import terminate
 
 CI_LENGTH = 88
@@ -521,20 +522,21 @@ def request_phone_otp(verification_id):
     current_app.logger.info(
         "IA-23 인증번호 발송: verification_id=%s issue_no=%s", verification.id, otp_row.issue_no
     )
-    return (
-        jsonify(
-            verification_id=str(verification.id),
-            stage=verification.stage,
-            phone_mask=mask_phone(number),
-            code_expires_at=kst_isoformat(otp_row.code_expires_at),
-            resend_available_at=kst_isoformat(
-                otp_row.issued_at + current_app.config["OTP_RESEND_INTERVAL"]
-            ),
-            issues_left=current_app.config["OTP_MAX_ISSUES"] - otp_row.issue_no,
-            message="이용자 휴대폰으로 인증번호를 보냈습니다.",
+    response = dict(
+        verification_id=str(verification.id),
+        stage=verification.stage,
+        phone_mask=mask_phone(number),
+        code_expires_at=kst_isoformat(otp_row.code_expires_at),
+        resend_available_at=kst_isoformat(
+            otp_row.issued_at + current_app.config["OTP_RESEND_INTERVAL"]
         ),
-        200,
+        issues_left=current_app.config["OTP_MAX_ISSUES"] - otp_row.issue_no,
+        message="이용자 휴대폰으로 인증번호를 보냈습니다.",
     )
+    preview_token = issue_preview_token(verification.id, otp_row.issue_no)
+    if preview_token:
+        response["local_preview_token"] = preview_token
+    return jsonify(response), 200
 
 
 @bp.post("/verifications/<uuid:verification_id>/phone/confirm")
