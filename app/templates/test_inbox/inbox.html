@@ -10,28 +10,78 @@
 {% endif %}
 
 {% if code %}
-<div class="card mb-3">
+<div class="card mb-3 ij-message">
   <div class="card-body">
-    <h2 class="h5 card-title">{{ phone_mask }}</h2>
-    <p class="display-6 mb-1">{{ code }}</p>
-    <p class="text-secondary small mb-0">유효 시각 {{ code_expires_at }} (발송 {{ issue_no }}회차)</p>
+    <p class="ij-message-from mb-2">[인증정보평가] 본인확인 인증번호</p>
+    <p class="ij-code mb-1">{{ code }}</p>
+    <p class="ij-footnote mb-0">
+      {{ phone_mask }} · 유효 시각 {{ code_expires_at }} (발송 {{ issue_no }}회차)
+    </p>
   </div>
 </div>
 {% endif %}
 
-<div class="card">
+{% if registered_phone %}
+<div class="card mb-3">
   <div class="card-body">
+    <h2 class="h6 card-title">등록된 휴대폰</h2>
+    <p class="mb-3">
+      <span class="badge text-bg-success">{{ registered_phone }}</span>
+      <span class="ij-footnote">이 창이 휴대폰 역할을 합니다. 수신함 키를 옮겨 적지 않아도 됩니다.</span>
+    </p>
+    <form method="post" action="{{ url_for('test_inbox.latest') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary w-100">문자 확인</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h2 class="h6 card-title">
+      {% if registered_phone %}다른 휴대폰 등록{% else %}휴대폰 등록{% endif %}
+    </h2>
+    <p class="ij-footnote">
+      통신사에 명의를 확인한 뒤 이 창을 수신함으로 씁니다. 실제 PASS 앱을 설치할 때 하는
+      통신사 본인확인에 해당합니다. 같은 번호로 다시 등록하면 이전 기기는 쓸 수 없습니다.
+    </p>
+    <form method="post" action="{{ url_for('test_inbox.register_device') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-2">
+        <label class="form-label" for="name">성명</label>
+        <input class="form-control" type="text" id="name" name="name" autocomplete="off" required>
+      </div>
+      <div class="mb-2">
+        <label class="form-label" for="phone_number">휴대폰번호</label>
+        <input class="form-control" type="tel" id="phone_number" name="phone_number"
+               inputmode="numeric" placeholder="01012345678" autocomplete="off" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="birth_date">생년월일</label>
+        <input class="form-control" type="date" id="birth_date" name="birth_date" required>
+      </div>
+      <button type="submit" class="btn btn-outline-primary w-100">휴대폰 등록</button>
+    </form>
+  </div>
+</div>
+
+<details class="card">
+  <summary class="card-body py-3 mb-0">수신함 키를 직접 입력</summary>
+  <div class="card-body pt-0">
     <form method="post" action="{{ url_for('test_inbox.latest') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="mb-3">
         <label class="form-label" for="inbox_key">수신함 키</label>
         <input class="form-control" type="text" id="inbox_key" name="inbox_key"
                autocomplete="off" required>
-        <div class="form-text">seed/people.json의 inbox_key, 또는 모의 PASS 앱
-          (<code>tools/pass_app.py register</code>)으로 발급받은 키를 입력해 주세요.</div>
+        <div class="form-text">
+          <code>seed/people.json</code>의 <code>inbox_key</code>, 또는 모의 PASS 앱
+          (<code>tools/pass_app.py register</code>)으로 발급받은 키입니다.
+        </div>
       </div>
-      <button type="submit" class="btn btn-primary w-100">최근 인증번호 보기</button>
+      <button type="submit" class="btn btn-outline-primary w-100">최근 인증번호 보기</button>
     </form>
   </div>
-</div>
+</details>
 {% endblock %}

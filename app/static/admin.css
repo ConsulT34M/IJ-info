@@ -1,25 +1,6 @@
-/* 관리자 콘솔 — 회사 브랜드(연두)에 맞춘다.
+/* 관리자 콘솔 전용 규칙. 색 토큰과 공통 버튼·포커스는 brand.css 에 있다.
  *
- * CSP에 'unsafe-inline'이 없으므로 inline style·<style>을 쓸 수 없다. 전부 여기에 둔다.
- * 색 토큰은 공개 홈페이지(static/site/site.css)와 같은 값을 쓴다. */
-
-:root {
-  --ij-lime: #8fd14f;
-  --ij-green: #5fa82a;
-  --ij-green-dark: #3e7a17;
-  --ij-ink: #14230d;
-  --ij-ink-soft: #566249;
-  --ij-line: #e2eada;
-  --ij-bg-soft: #f6faf0;
-  --ij-bg-deep: #1b2d12;
-  --ij-radius: 12px;
-  --ij-shadow: 0 1px 2px rgba(20, 35, 13, .05), 0 8px 24px rgba(20, 35, 13, .06);
-}
-
-body {
-  background: var(--ij-bg-soft);
-  color: var(--ij-ink);
-}
+ * CSP에 'unsafe-inline'이 없으므로 inline style·<style>을 쓸 수 없다. 전부 여기에 둔다. */
 
 /* ── 상단 바 ───────────────────────────────────────────────────── */
 
@@ -89,68 +70,7 @@ body {
   color: var(--ij-ink-soft);
 }
 
-/* ── 버튼·배지를 브랜드 색으로 ───────────────────────────────────── */
-
-.btn-primary {
-  --bs-btn-bg: var(--ij-green);
-  --bs-btn-border-color: var(--ij-green);
-  --bs-btn-hover-bg: var(--ij-green-dark);
-  --bs-btn-hover-border-color: var(--ij-green-dark);
-  --bs-btn-active-bg: var(--ij-green-dark);
-  --bs-btn-active-border-color: var(--ij-green-dark);
-  --bs-btn-disabled-bg: var(--ij-lime);
-  --bs-btn-disabled-border-color: var(--ij-lime);
-}
-
-.btn-outline-primary {
-  --bs-btn-color: var(--ij-green-dark);
-  --bs-btn-border-color: var(--ij-lime);
-  --bs-btn-hover-bg: var(--ij-green);
-  --bs-btn-hover-border-color: var(--ij-green);
-  --bs-btn-active-bg: var(--ij-green-dark);
-  --bs-btn-active-border-color: var(--ij-green-dark);
-}
-
-/* 사이트와 같은 규칙: 기본은 밑줄 없음, 글 속 링크만 올렸을 때 밑줄 */
-a { color: var(--ij-green-dark); text-decoration: none; }
-a:hover { color: var(--ij-green); text-decoration: underline; }
-
-.ij-brand,
-.ij-brand:hover,
-.ij-nav a,
-.ij-nav a:hover,
-.ij-stat,
-.ij-stat:hover,
-.btn,
-.page-link { text-decoration: none; }
-
-.text-bg-success {
-  background-color: var(--ij-green) !important;
-}
-
-/* 키보드로 옮겨 다닐 때 지금 어디인지 분명하게 */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--ij-green);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.form-control:focus,
-.form-select:focus {
-  border-color: var(--ij-lime);
-  box-shadow: 0 0 0 .2rem rgba(143, 209, 79, .25);
-}
-
 /* ── 카드 ──────────────────────────────────────────────────────── */
-
-.card {
-  border-color: var(--ij-line);
-  border-radius: var(--ij-radius);
-}
 
 .ij-stat {
   display: block;
@@ -256,19 +176,12 @@ textarea:focus-visible {
 
 /* ── 그 밖 ─────────────────────────────────────────────────────── */
 
-.ekyc-shell { max-width: 640px; }
-
 .ekyc-prewrap {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .ij-search { width: 11rem; }
-
-.ij-footnote {
-  font-size: .78rem;
-  color: var(--ij-ink-soft);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .ij-nav a::after,

@@ -400,7 +400,7 @@ def flow(client, api_post, app):
 
         def inbox_code(self, inbox_key: str) -> str | None:
             response = client.post("/test-inbox/latest", data={"inbox_key": inbox_key, "csrf_token": self._csrf_token})
-            found = re.search(r'class="display-6 mb-1">(\d{6})<', response.get_data(as_text=True))
+            found = re.search(r'class="ij-code mb-1">(\d{6})<', response.get_data(as_text=True))
             return found.group(1) if found else None
 
     return Flow()

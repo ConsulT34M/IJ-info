@@ -191,7 +191,7 @@ def test_inbox_returns_html_to_a_browser(client, person, carrier_backend, flow):
     )
     assert response.status_code == 200
     assert "text/html" in response.headers["Content-Type"]
-    assert re.search(r'class="display-6 mb-1">\d{6}<', response.get_data(as_text=True))
+    assert re.search(r'class="ij-code mb-1">\d{6}<', response.get_data(as_text=True))
 
 
 def test_inbox_errors_are_json_for_the_app(client, csrf):
@@ -206,3 +206,98 @@ def test_inbox_never_returns_the_phone_number(client, person, carrier_backend, f
     response = read_inbox(client, flow.csrf_token, person["inbox_key"])
     assert response.status_code == 200
     assert person["phone_number"] not in str(response.get_json())
+
+
+# --- 화면에서 바로 등록하기 (D99) -------------------------------------------
+#
+# 다른 컴퓨터에서 받아 돌릴 때 "PASS 앱에서 받으라"는 안내만 보고 막혔다.
+# 터미널을 열지 않고도 이 창 자체를 휴대폰으로 등록할 수 있어야 한다.
+
+
+def test_a_browser_registers_without_seeing_the_key(client, csrf, person, carrier_backend):
+    """등록하면 키는 서버 세션에만 둔다. 화면에 내보이지 않는다."""
+    response = client.post(
+        DEVICES,
+        data={
+            "name": person["name"],
+            "phone_number": person["phone_number"],
+            "birth_date": person["birth_date"],
+            "csrf_token": csrf,
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+
+    assert "등록된 휴대폰" in body
+    assert person["phone_mask"] if "phone_mask" in person else True
+    # 키가 화면에 찍히면 옮겨 적는 그 자리로 되돌아간다
+    with client.session_transaction() as session:
+        issued = session["test_inbox_key"]
+    assert issued and issued not in body
+
+
+def test_the_registered_browser_reads_the_code_without_a_key(
+    client, csrf, person, carrier_backend, flow
+):
+    """등록한 창은 수신함 키 없이 문자를 본다."""
+    client.post(
+        DEVICES,
+        data={
+            "name": person["name"],
+            "phone_number": person["phone_number"],
+            "birth_date": person["birth_date"],
+            "csrf_token": csrf,
+        },
+        follow_redirects=True,
+    )
+    flow.to_phone()
+    flow.request_otp(person["name"], person["phone_number"])
+
+    # 인증창 진입이 세션을 새로 만들었으므로 토큰을 다시 받는다. 기기 등록은 남아 있다.
+    page = client.get("/test-inbox/").get_data(as_text=True)
+    fresh = re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
+    assert "등록된 휴대폰" in page
+
+    response = client.post(LATEST, data={"csrf_token": fresh})
+    assert response.status_code == 200
+    assert re.search(r'class="ij-code mb-1">\d{6}<', response.get_data(as_text=True))
+
+
+def test_without_a_registration_the_key_is_still_required(client, csrf):
+    response = client.post(LATEST, data={"csrf_token": csrf})
+    assert response.status_code == 400
+    assert "휴대폰을 먼저 등록" in response.get_data(as_text=True)
+
+
+def test_a_wrong_identity_does_not_register_the_browser(client, csrf, person, carrier_backend):
+    """명의가 틀리면 세션에 아무것도 남지 않는다."""
+    response = client.post(
+        DEVICES,
+        data={
+            "name": "다른사람",
+            "phone_number": person["phone_number"],
+            "birth_date": person["birth_date"],
+            "csrf_token": csrf,
+        },
+    )
+    assert response.status_code == 403
+    with client.session_transaction() as session:
+        assert "test_inbox_key" not in session
+
+
+def test_the_pass_app_still_gets_json(client, csrf, person, carrier_backend):
+    """터미널 앱(tools/pass_app.py)의 계약은 그대로다."""
+    response = client.post(
+        DEVICES,
+        data={
+            "name": person["name"],
+            "phone_number": person["phone_number"],
+            "birth_date": person["birth_date"],
+            "csrf_token": csrf,
+        },
+        headers=JSON,
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["inbox_key"] and body["phone_mask"].startswith("010-****")

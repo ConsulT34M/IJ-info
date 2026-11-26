@@ -41,8 +41,15 @@ def _drop_cached_csrf_token() -> None:
     g.pop(current_app.config.get("WTF_CSRF_FIELD_NAME", "csrf_token"), None)
 
 
+# 테스트 수신함이 "이 창은 휴대폰이다"를 적어 두는 자리(D99). 인증창 세션을 새로 만들
+# 때도 이 값은 남긴다 — 같은 브라우저의 다른 탭에서 문자를 보는 중일 수 있고, 수신함은
+# 실습 전용 화면이라 인증창에 대한 권한을 전혀 주지 않는다.
+TEST_INBOX_PREFIX = "test_inbox_"
+
+
 def start_session(verification: Verification) -> None:
     """인증창 진입 시 서버 세션을 새로 만든다(세션 고정 방지)."""
+    kept = {k: v for k, v in session.items() if k.startswith(TEST_INBOX_PREFIX)}
     session.clear()
     _drop_cached_csrf_token()
     regenerate = getattr(current_app.session_interface, "regenerate", None)
@@ -51,11 +58,14 @@ def start_session(verification: Verification) -> None:
     session.permanent = True
     session[SESSION_VERIFICATION_ID] = str(verification.id)
     session[SESSION_ENTRY_NONCE] = verification.entry_nonce
+    session.update(kept)
 
 
 def end_session() -> None:
-    """인증창 세션을 비운다."""
+    """인증창 세션을 비운다. 수신함 기기 등록은 남긴다(D99)."""
+    kept = {k: v for k, v in session.items() if k.startswith(TEST_INBOX_PREFIX)}
     session.clear()
+    session.update(kept)
     _drop_cached_csrf_token()
 
 

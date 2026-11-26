@@ -3,7 +3,13 @@
 실제 문자를 보낼 수 없으니 여기서 인증번호를 꺼내 본다. D3에 따라
 TEST_INBOX_ALLOWED_IPS에 있는 IP만 접근할 수 있다.
 
-수신함 키는 `tools/pass_app.py`(모의 PASS 앱)가 기기 등록으로 발급받는다(D85).
+수신함 키는 기기 등록으로 발급받는다(D85). 등록하는 길은 둘이다.
+
+- 이 화면의 「휴대폰 등록」 — 브라우저를 휴대폰으로 삼는다. 키가 서버 세션에 남아
+  이용자가 키를 옮겨 적을 일이 없다(D99).
+- `tools/pass_app.py`(모의 PASS 앱) — 터미널에서 같은 경로를 쓴다.
+
+어느 쪽이든 통신사 명의 확인(MC-03)을 통과해야 키가 나온다.
 people.json의 값을 그대로 쓰는 것도 아직 된다.
 """
 
@@ -12,7 +18,17 @@ from __future__ import annotations
 from datetime import date
 from secrets import token_urlsafe
 
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from app.common import carrier
 from app.common.client_ip import client_ip
@@ -23,6 +39,10 @@ from app.common.timeutil import kst_isoformat, now_utc
 from app.models import PhoneOtp, TestPhone, db
 
 bp = Blueprint("test_inbox", __name__, url_prefix="/test-inbox")
+
+# 이 창을 휴대폰으로 등록했을 때 키를 두는 자리. 서버 세션이라 화면에 나오지 않는다.
+SESSION_INBOX_KEY = "test_inbox_key"
+SESSION_PHONE_MASK = "test_inbox_phone_mask"
 
 
 @bp.before_request
@@ -35,8 +55,11 @@ def _only_allowed_ips():
 
 @bp.get("/")
 def inbox_page():
-    """수신함 키 입력 화면."""
-    return render_template("test_inbox/inbox.html")
+    """휴대폰 등록 · 수신함 키 입력 화면."""
+    return render_template(
+        "test_inbox/inbox.html",
+        registered_phone=session.get(SESSION_PHONE_MASK),
+    )
 
 
 def _wants_json() -> bool:
@@ -49,7 +72,15 @@ def _inbox_error(message: str, status: int, phone_mask: str | None = None):
     """수신함 오류를 요청한 형식으로 돌려준다."""
     if _wants_json():
         return jsonify(error=message, phone_mask=phone_mask), status
-    return render_template("test_inbox/inbox.html", error=message, phone_mask=phone_mask), status
+    return (
+        render_template(
+            "test_inbox/inbox.html",
+            error=message,
+            phone_mask=phone_mask,
+            registered_phone=session.get(SESSION_PHONE_MASK),
+        ),
+        status,
+    )
 
 
 @bp.post("/latest")
@@ -57,7 +88,10 @@ def latest():
     """수신함 키로 가장 최근의 유효한 인증번호를 꺼낸다."""
     inbox_key = (request.form.get("inbox_key") or "").strip()
     if not inbox_key:
-        return _inbox_error("수신함 키를 입력해 주세요.", 400)
+        # 이 창으로 휴대폰을 등록했으면 그 키를 쓴다. 옮겨 적을 필요가 없다(D99).
+        inbox_key = session.get(SESSION_INBOX_KEY) or ""
+    if not inbox_key:
+        return _inbox_error("휴대폰을 먼저 등록하거나 수신함 키를 입력해 주세요.", 400)
 
     phone = db.session.scalars(
         db.select(TestPhone).filter_by(inbox_key_hash=sha256_hex(inbox_key))
@@ -138,7 +172,15 @@ def register_device():
     row.inbox_key_hash = sha256_hex(inbox_key)
     db.session.commit()
     current_app.logger.info("기기 등록: phone_mask=%s", row.phone_mask)
-    return jsonify(inbox_key=inbox_key, phone_mask=row.phone_mask), 200
+
+    if _wants_json():
+        return jsonify(inbox_key=inbox_key, phone_mask=row.phone_mask), 200
+
+    # 브라우저는 이 창을 휴대폰으로 쓴다. 키는 서버 세션에만 두고 화면에 띄우지 않는다 —
+    # 실제로도 문자는 기기에 오지 저장소 열쇠를 사람이 옮겨 적지 않는다(D99).
+    session[SESSION_INBOX_KEY] = inbox_key
+    session[SESSION_PHONE_MASK] = row.phone_mask
+    return redirect(url_for("test_inbox.inbox_page"))
 
 
 def _looks_like_a_date(value: str) -> bool:

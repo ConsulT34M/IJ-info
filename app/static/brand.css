@@ -1,0 +1,111 @@
+/* (주)인증정보평가 공통 브랜드 — 인증창 · 테스트 수신함 · 관리자 콘솔이 함께 쓴다.
+ *
+ * 색 값은 공개 홈페이지(static/site/site.css)와 같다. 한 곳에서만 고치려고 모아 뒀다.
+ * CSP에 'unsafe-inline'이 없으므로 inline style·<style>을 쓸 수 없다. 전부 여기에 둔다. */
+
+:root {
+  --ij-lime: #8fd14f;
+  --ij-green: #5fa82a;
+  --ij-green-dark: #3e7a17;
+  --ij-ink: #14230d;
+  --ij-ink-soft: #566249;
+  --ij-line: #e2eada;
+  --ij-bg-soft: #f6faf0;
+  --ij-radius: 12px;
+  --ij-shadow: 0 1px 2px rgba(20, 35, 13, .05), 0 8px 24px rgba(20, 35, 13, .06);
+}
+
+body {
+  background: var(--ij-bg-soft);
+  color: var(--ij-ink);
+}
+
+a { color: var(--ij-green-dark); text-decoration: none; }
+a:hover { color: var(--ij-green); text-decoration: underline; }
+.btn, .page-link { text-decoration: none; }
+
+.btn-primary {
+  --bs-btn-bg: var(--ij-green);
+  --bs-btn-border-color: var(--ij-green);
+  --bs-btn-hover-bg: var(--ij-green-dark);
+  --bs-btn-hover-border-color: var(--ij-green-dark);
+  --bs-btn-active-bg: var(--ij-green-dark);
+  --bs-btn-active-border-color: var(--ij-green-dark);
+  --bs-btn-disabled-bg: var(--ij-lime);
+  --bs-btn-disabled-border-color: var(--ij-lime);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--ij-green-dark);
+  --bs-btn-border-color: var(--ij-lime);
+  --bs-btn-hover-bg: var(--ij-green);
+  --bs-btn-hover-border-color: var(--ij-green);
+  --bs-btn-active-bg: var(--ij-green-dark);
+  --bs-btn-active-border-color: var(--ij-green-dark);
+}
+
+.text-bg-success { background-color: var(--ij-green) !important; }
+
+.card {
+  border-color: var(--ij-line);
+  border-radius: var(--ij-radius);
+}
+
+/* 키보드로 옮겨 다닐 때 지금 어디인지 분명하게 */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--ij-green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--ij-lime);
+  box-shadow: 0 0 0 .2rem rgba(143, 209, 79, .25);
+}
+
+/* 머리말의 로고 */
+.ij-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  color: var(--ij-ink);
+}
+
+.ij-brand img { width: 30px; height: 30px; }
+
+.ij-footnote {
+  font-size: .78rem;
+  color: var(--ij-ink-soft);
+}
+
+/* 테스트 문자 수신함 — 받은 문자처럼 보이게 */
+.ij-message {
+  border-color: var(--ij-lime);
+  box-shadow: var(--ij-shadow);
+}
+
+.ij-message-from {
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--ij-green-dark);
+}
+
+.ij-code {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: .25em;
+  color: var(--ij-ink);
+}
+
+details.card > summary {
+  cursor: pointer;
+  font-size: .9rem;
+  color: var(--ij-ink-soft);
+}
+
+details.card > summary::marker { color: var(--ij-green); }

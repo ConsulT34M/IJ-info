@@ -67,7 +67,7 @@ def direct(api_post, app, client, carrier_backend, seeded):
                 "/test-inbox/latest",
                 data={"inbox_key": person["inbox_key"], "csrf_token": token.group(1)},
             )
-            found = re.search(r'class="display-6 mb-1">(\d{6})<', response.get_data(as_text=True))
+            found = re.search(r'class="ij-code mb-1">(\d{6})<', response.get_data(as_text=True))
             return found.group(1) if found else None
 
         def confirm(self, code, **overrides):
