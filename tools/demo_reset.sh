@@ -93,7 +93,7 @@ $PY -m carrier.seed | head -n 2
 step "가짜 거래소 고객사 등록"
 mkdir -p instance
 CLIENT_OUT=$($FLASK create-client \
-  --name "SILO 거래소" \
+  --name "KRX 가상화폐 거래소" \
   --callback-url "http://127.0.0.1:9000/callback" \
   --allowed-ips "127.0.0.1")
 API_KEY=$(printf '%s\n' "$CLIENT_OUT" | awk -F': ' '/X-Api-Key/{print $2}')

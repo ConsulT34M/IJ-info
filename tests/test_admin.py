@@ -455,3 +455,59 @@ def test_auditor_cannot_answer_an_inquiry(admin_session, app):
     assert response.status_code == 403
     db.session.expire_all()
     assert db.session.get(SiteInquiry, row.id).status == "RECEIVED"
+
+
+# --- 콘솔 UI (D97) ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/admin/login", "/admin/dashboard", "/admin/", "/admin/clients", "/admin/inquiries"],
+)
+def test_admin_pages_have_no_inline_style_or_script(admin_session, path):
+    """관리자 콘솔도 공개 사이트와 같은 CSP를 받는다. inline style·script를 쓰면 화면이 깨진다."""
+    import re
+
+    account = admin_session()
+    body = account["http"].get(path).get_data(as_text=True)
+
+    assert ' style="' not in body
+    assert "<style" not in body
+    for tag in re.findall(r"<script\b[^>]*>", body):
+        assert "src=" in tag, f"{path}: src 없는 script 태그 — CSP가 막는다"
+
+
+def test_console_carries_the_company_brand(admin_session):
+    account = admin_session()
+    body = account["http"].get("/admin/dashboard").get_data(as_text=True)
+
+    assert "(주)인증정보평가" in body
+    assert "logo-mark.svg" in body
+    assert "admin.css" in body
+
+
+def test_current_menu_is_marked(admin_session):
+    """지금 보고 있는 메뉴를 표시한다."""
+    account = admin_session()
+    body = account["http"].get("/admin/clients").get_data(as_text=True)
+    assert 'aria-current=page' in body or 'aria-current="page"' in body
+    assert "is-current" in body
+
+
+def test_dashboard_numbers_link_into_the_history(admin_session):
+    """숫자를 눌러 해당 목록으로 넘어갈 수 있어야 한다."""
+    account = admin_session()
+    body = account["http"].get("/admin/dashboard").get_data(as_text=True)
+    assert "/admin/?status=PENDING" in body
+    assert "/admin/?status=SUCCEEDED" in body
+
+
+def test_history_rows_carry_a_detail_link(admin_session, make_verification):
+    """행 전체를 눌러도 상세로 가게 한다. '상세' 버튼은 그대로 둔다(JS 없이도 동작)."""
+    row = make_verification(client_user_ref="row-click")
+    account = admin_session()
+    body = account["http"].get("/admin/").get_data(as_text=True)
+
+    detail = f"/admin/verifications/{row.id}"
+    assert f'data-href="{detail}"' in body
+    assert f'href="{detail}"' in body

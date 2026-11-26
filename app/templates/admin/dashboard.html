@@ -12,17 +12,17 @@
 {% endif %}
 
 <div class="row g-3 mb-4">
-  {% for label, value, sub in [
-      ('최근 24시간', totals.today, '접수된 인증'),
-      ('최근 7일', totals.week, '접수된 인증'),
-      ('진행 중', totals.pending, '아직 종결되지 않음'),
-      ('전체', totals.all, '누적')] %}
+  {% for label, value, sub, status in [
+      ('최근 24시간', totals.today, '접수된 인증', ''),
+      ('최근 7일', totals.week, '접수된 인증', ''),
+      ('진행 중', totals.pending, '아직 종결되지 않음', 'PENDING'),
+      ('전체', totals.all, '누적', '')] %}
   <div class="col-6 col-lg-3">
-    <div class="card h-100"><div class="card-body py-3">
-      <div class="text-secondary small">{{ label }}</div>
-      <div class="fs-3 fw-bold">{{ value }}</div>
-      <div class="text-secondary small">{{ sub }}</div>
-    </div></div>
+    <a class="ij-stat" href="{{ url_for('admin.verification_list', status=status or none) }}">
+      <div class="ij-stat-label">{{ label }}</div>
+      <div class="ij-stat-value {{ 'is-zero' if not value }}">{{ value }}</div>
+      <div class="ij-stat-sub">{{ sub }} · 목록 보기</div>
+    </a>
   </div>
   {% endfor %}
 </div>
@@ -32,16 +32,24 @@
     <div class="card h-100"><div class="card-body">
       <h3 class="h6 card-title">판정 결과</h3>
       {% if success_rate is not none %}
-      <p class="mb-3">성공률 <strong class="fs-5">{{ success_rate }}%</strong>
+      <p class="mb-2">성공률 <strong class="fs-5">{{ success_rate }}%</strong>
         <span class="text-secondary small">(종결된 건 기준)</span></p>
+      <div class="ij-bar mb-3" role="img" aria-label="성공률 {{ success_rate }}%">
+        <span class="ij-bar-w{{ (success_rate / 5) | round | int }}"></span>
+      </div>
       {% else %}
       <p class="text-secondary mb-3">아직 종결된 건이 없습니다.</p>
       {% endif %}
       <table class="table table-sm mb-0">
         <tbody>
           {% for key, name in [('SUCCEEDED','성공'),('FAILED','실패'),('CANCELLED','취소'),('EXPIRED','만료')] %}
-          <tr><th class="fw-normal">{{ name }} <code class="text-secondary">{{ key }}</code></th>
-              <td class="text-end">{{ by_status[key] }}</td></tr>
+          <tr>
+            <th class="fw-normal">
+              <a href="{{ url_for('admin.verification_list', status=key) }}">{{ name }}</a>
+              <code class="text-secondary">{{ key }}</code>
+            </th>
+            <td class="text-end">{{ by_status[key] }}</td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -55,7 +63,12 @@
       <table class="table table-sm mb-0">
         <tbody>
           {% for code, count in reasons %}
-          <tr><th class="fw-normal"><code>{{ code }}</code></th><td class="text-end">{{ count }}</td></tr>
+          <tr>
+            <th class="fw-normal">
+              <a href="{{ url_for('admin.verification_list', reason=code) }}"><code>{{ code }}</code></a>
+            </th>
+            <td class="text-end">{{ count }}</td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -86,11 +99,11 @@
   <h3 class="h6 card-title">최근 실패·취소·만료</h3>
   <p class="text-secondary small">사유 코드와 시각만 표시합니다. 성명·번호는 상세 화면에서 마스킹된 값으로 봅니다.</p>
   <div class="table-responsive">
-    <table class="table table-sm align-middle mb-0">
-      <thead class="table-light"><tr><th>종결 시각</th><th>상태</th><th>사유</th><th>마지막 중간 실패</th><th></th></tr></thead>
+    <table class="table table-sm align-middle mb-0 ij-table">
+      <thead><tr><th>종결 시각</th><th>상태</th><th>사유</th><th>마지막 중간 실패</th><th></th></tr></thead>
       <tbody>
         {% for row in recent_failures %}
-        <tr>
+        <tr data-href="{{ url_for('admin.verification_detail', verification_id=row.id) }}">
           <td class="text-secondary small">{{ row.completed_at | kst }}</td>
           <td><span class="badge text-bg-secondary">{{ row.status }}</span></td>
           <td><code>{{ row.reason_code or '-' }}</code></td>

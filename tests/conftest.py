@@ -153,7 +153,7 @@ def exchange_client(app):
 
     row = Client(
         id=client_id,
-        name="SILO 거래소",
+        name="KRX 가상화폐 거래소",
         api_key_hash=api_key_hash(api_key),
         hmac_secret_ref=secret_ref,
         callback_url="http://127.0.0.1:9000/callback",

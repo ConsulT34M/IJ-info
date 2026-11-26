@@ -237,7 +237,7 @@ Copy-Item samples\people.json seed\people.json
 .venv\Scripts\python.exe -m carrier.seed
 
 # 아래 두 명령이 출력하는 API Key·HMAC Secret·TOTP URI는 한 번만 보여준다. 바로 보관한다
-.venv\Scripts\flask.exe create-client --name "SILO 거래소" `
+.venv\Scripts\flask.exe create-client --name "KRX 가상화폐 거래소" `
   --callback-url http://127.0.0.1:9000/callback --allowed-ips 127.0.0.1
 .venv\Scripts\flask.exe create-admin --login-id admin1  --role admin   --allowed-ips 127.0.0.1
 .venv\Scripts\flask.exe create-admin --login-id auditor1 --role auditor --allowed-ips 127.0.0.1
@@ -553,7 +553,7 @@ GET /api/v1/verifications/{verification_id}      # 빈 본문에 서명
 ├─ samples/                 팀원 공용 가상 데이터(인물 10명 + 합성 이미지 5개 + 자료실 공개 문서)
 ├─ seed/make_people.py      가상 인물 생성기(고정 시드)
 ├─ tools/                   demo_reset.sh · fake_exchange.py · pass_app.py · peek.py · make_sample_images.py
-├─ tests/                   pytest (517개)
+├─ tests/                   pytest (526개)
 ├─ docs/                    DEMO.md · DECISIONS.md · NOTION_SUMMARY.md
 └─ docker-compose.yml       PostgreSQL 16 (127.0.0.1에만 바인딩)
 ```

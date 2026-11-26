@@ -1,0 +1,281 @@
+/* 관리자 콘솔 — 회사 브랜드(연두)에 맞춘다.
+ *
+ * CSP에 'unsafe-inline'이 없으므로 inline style·<style>을 쓸 수 없다. 전부 여기에 둔다.
+ * 색 토큰은 공개 홈페이지(static/site/site.css)와 같은 값을 쓴다. */
+
+:root {
+  --ij-lime: #8fd14f;
+  --ij-green: #5fa82a;
+  --ij-green-dark: #3e7a17;
+  --ij-ink: #14230d;
+  --ij-ink-soft: #566249;
+  --ij-line: #e2eada;
+  --ij-bg-soft: #f6faf0;
+  --ij-bg-deep: #1b2d12;
+  --ij-radius: 12px;
+  --ij-shadow: 0 1px 2px rgba(20, 35, 13, .05), 0 8px 24px rgba(20, 35, 13, .06);
+}
+
+body {
+  background: var(--ij-bg-soft);
+  color: var(--ij-ink);
+}
+
+/* ── 상단 바 ───────────────────────────────────────────────────── */
+
+.ij-topbar {
+  background: #fff;
+  border-bottom: 1px solid var(--ij-line);
+  box-shadow: 0 1px 0 rgba(20, 35, 13, .03);
+}
+
+.ij-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  font-weight: 700;
+  color: var(--ij-ink);
+  letter-spacing: -.01em;
+}
+
+.ij-brand img { width: 28px; height: 28px; }
+
+.ij-brand-sub {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--ij-green-dark);
+  background: rgba(143, 209, 79, .18);
+  border-radius: 999px;
+  padding: .12rem .5rem;
+  letter-spacing: .02em;
+}
+
+/* 메뉴: 지금 보고 있는 곳을 밑줄로 표시한다 */
+.ij-nav a {
+  position: relative;
+  color: var(--ij-ink-soft);
+  font-size: .92rem;
+  font-weight: 500;
+  padding: .45rem .15rem;
+  transition: color .15s ease;
+}
+
+.ij-nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -.1rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ij-green);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .18s ease;
+}
+
+.ij-nav a:hover { color: var(--ij-green-dark); }
+.ij-nav a:hover::after { transform: scaleX(.6); }
+
+.ij-nav a.is-current {
+  color: var(--ij-green-dark);
+  font-weight: 700;
+}
+
+.ij-nav a.is-current::after { transform: scaleX(1); }
+
+.ij-who {
+  font-size: .8rem;
+  color: var(--ij-ink-soft);
+}
+
+/* ── 버튼·배지를 브랜드 색으로 ───────────────────────────────────── */
+
+.btn-primary {
+  --bs-btn-bg: var(--ij-green);
+  --bs-btn-border-color: var(--ij-green);
+  --bs-btn-hover-bg: var(--ij-green-dark);
+  --bs-btn-hover-border-color: var(--ij-green-dark);
+  --bs-btn-active-bg: var(--ij-green-dark);
+  --bs-btn-active-border-color: var(--ij-green-dark);
+  --bs-btn-disabled-bg: var(--ij-lime);
+  --bs-btn-disabled-border-color: var(--ij-lime);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--ij-green-dark);
+  --bs-btn-border-color: var(--ij-lime);
+  --bs-btn-hover-bg: var(--ij-green);
+  --bs-btn-hover-border-color: var(--ij-green);
+  --bs-btn-active-bg: var(--ij-green-dark);
+  --bs-btn-active-border-color: var(--ij-green-dark);
+}
+
+/* 사이트와 같은 규칙: 기본은 밑줄 없음, 글 속 링크만 올렸을 때 밑줄 */
+a { color: var(--ij-green-dark); text-decoration: none; }
+a:hover { color: var(--ij-green); text-decoration: underline; }
+
+.ij-brand,
+.ij-brand:hover,
+.ij-nav a,
+.ij-nav a:hover,
+.ij-stat,
+.ij-stat:hover,
+.btn,
+.page-link { text-decoration: none; }
+
+.text-bg-success {
+  background-color: var(--ij-green) !important;
+}
+
+/* 키보드로 옮겨 다닐 때 지금 어디인지 분명하게 */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--ij-green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--ij-lime);
+  box-shadow: 0 0 0 .2rem rgba(143, 209, 79, .25);
+}
+
+/* ── 카드 ──────────────────────────────────────────────────────── */
+
+.card {
+  border-color: var(--ij-line);
+  border-radius: var(--ij-radius);
+}
+
+.ij-stat {
+  display: block;
+  color: inherit;
+  border: 1px solid var(--ij-line);
+  border-radius: var(--ij-radius);
+  background: #fff;
+  padding: .95rem 1.1rem;
+  height: 100%;
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+.ij-stat:hover,
+.ij-stat:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--ij-shadow);
+  border-color: var(--ij-lime);
+  color: inherit;
+}
+
+.ij-stat-label { font-size: .78rem; color: var(--ij-ink-soft); }
+.ij-stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+.ij-stat-sub { font-size: .75rem; color: var(--ij-ink-soft); }
+
+/* 값이 0이 아닐 때만 눈에 띄게 */
+.ij-stat-value.is-zero { color: var(--ij-ink-soft); font-weight: 600; }
+
+/* ── 표 ────────────────────────────────────────────────────────── */
+
+.ij-table-wrap {
+  background: #fff;
+  border: 1px solid var(--ij-line);
+  border-radius: var(--ij-radius);
+  overflow: hidden;
+}
+
+.ij-table thead th {
+  background: var(--ij-bg-soft);
+  color: var(--ij-ink-soft);
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  border-bottom: 1px solid var(--ij-line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ij-table tbody tr {
+  transition: background-color .12s ease;
+}
+
+.ij-table tbody tr:hover {
+  background: rgba(143, 209, 79, .09);
+}
+
+/* 행 어디를 눌러도 상세로 간다(admin.js). 커서로 알려 준다. */
+.ij-row-link { cursor: pointer; }
+
+.ij-table tbody tr.table-warning:hover {
+  background: #ffeaa7;
+}
+
+/* ── 진행 막대 (판정 결과 비율) ──────────────────────────────────── */
+
+.ij-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ij-line);
+  overflow: hidden;
+}
+
+.ij-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ij-lime), var(--ij-green));
+  transition: width .5s ease;
+}
+
+/* 너비는 inline style 로 줄 수 없다(CSP). 5% 단위 클래스로 둔다. */
+.ij-bar-w0 { width: 0%; }
+.ij-bar-w1 { width: 5%; }
+.ij-bar-w2 { width: 10%; }
+.ij-bar-w3 { width: 15%; }
+.ij-bar-w4 { width: 20%; }
+.ij-bar-w5 { width: 25%; }
+.ij-bar-w6 { width: 30%; }
+.ij-bar-w7 { width: 35%; }
+.ij-bar-w8 { width: 40%; }
+.ij-bar-w9 { width: 45%; }
+.ij-bar-w10 { width: 50%; }
+.ij-bar-w11 { width: 55%; }
+.ij-bar-w12 { width: 60%; }
+.ij-bar-w13 { width: 65%; }
+.ij-bar-w14 { width: 70%; }
+.ij-bar-w15 { width: 75%; }
+.ij-bar-w16 { width: 80%; }
+.ij-bar-w17 { width: 85%; }
+.ij-bar-w18 { width: 90%; }
+.ij-bar-w19 { width: 95%; }
+.ij-bar-w20 { width: 100%; }
+
+/* ── 그 밖 ─────────────────────────────────────────────────────── */
+
+.ekyc-shell { max-width: 640px; }
+
+.ekyc-prewrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ij-search { width: 11rem; }
+
+.ij-footnote {
+  font-size: .78rem;
+  color: var(--ij-ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ij-nav a::after,
+  .ij-stat,
+  .ij-bar > span,
+  .ij-table tbody tr {
+    transition: none;
+  }
+  .ij-stat:hover { transform: none; }
+}
