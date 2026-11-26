@@ -10,7 +10,6 @@
 <body>
   {% if code %}
   <div class="message" role="status">
-    <p class="sender">IJ-info 본인확인</p>
     <p>인증번호 <strong class="code">{{ code }}</strong>를 왼쪽 화면에 입력해 주세요.</p>
     <small>{{ registered_phone }} · 3분간 유효</small>
   </div>
@@ -18,7 +17,6 @@
   <div class="message" role="alert"><p class="error">{{ error }}</p></div>
   {% elif registered_phone %}
   <div class="message" role="status">
-    <p class="sender">IJ-info 본인확인</p>
     <p>{{ registered_phone }}로 보낸 인증번호를 기다리는 중입니다.</p>
   </div>
   {% else %}
