@@ -416,28 +416,35 @@ git diff ops/apache/active.conf   # 지금 어느 상태인지
 
 ### ⒝ 인증 화면을 거래소가 만든다 — `mode: "DIRECT"`
 
-거래소가 자기 화면에서 입력을 받아 서버 간 API로 넘긴다. **휴대폰 본인확인은 거래소가 하고,
-그때 받은 CI를 같이 보낸다.** A사는 그 CI와 제출된 주민등록번호로 계산한 CI를 대조한다(X-01).
+거래소가 자기 화면에서 입력을 받아 서버 간 API로 넘긴다. 화면만 거래소 것이고,
+**휴대폰 본인확인·CI 발급·신분증·얼굴 판정은 전부 A사가 한다**(D98).
 
 | ID | 방향 | 메서드·경로 | 용도 |
 |---|---|---|---|
 | **IA-01** | 거래소 → A사 | `POST /api/v1/verifications` (`mode: "DIRECT"`) | `auth_url` 없이 `verification_id`만 |
-| **IA-21** | 거래소 → A사 | `POST /api/v1/verifications/{id}/id-card` | 신분증 이미지 + 성명·주민번호·발급일자 + CI |
+| **IA-23** | 거래소 → A사 | `POST /api/v1/verifications/{id}/phone/otp` | 명의 대조(MC-01) 후 인증번호 발송 |
+| **IA-24** | 거래소 → A사 | `POST /api/v1/verifications/{id}/phone/confirm` | 인증번호 확인 → CI 수령(MC-02) |
+| **IA-21** | 거래소 → A사 | `POST /api/v1/verifications/{id}/id-card` | 신분증 이미지 + 성명·주민번호·발급일자 |
 | **IA-22** | 거래소 → A사 | `POST /api/v1/verifications/{id}/face` | 얼굴 이미지 → **최종 판정** |
 | **IA-11 / IA-12** | | 위와 동일 | 결과 웹훅·조회(동기 응답으로도 받는다) |
 
-```bash
-python tools/fake_exchange.py direct \
-  --name 홍길동 --rrn 9001011234567 --issue-date 2015-03-02 \
-  --ci "(88자 CI)" \
-  --id-card samples/images/id_card.png --face samples/images/selfie.png
-```
-
+- **거래소는 CI를 만들지도 보지도 않는다.** IA-21에 `ci`를 보내면 **400**이다.
+  CI는 통신사가 발급해 A사 안에만 남는다.
+  전처럼 거래소가 같은 키로 주민등록번호에서 CI를 계산해 보내면, X-01 대조가
+  **같은 값을 두 번 계산해 비교하는 항등식**이 되어 검사 구실을 못 한다.
+- **인증번호도 거래소로 가지 않는다.** IA-23 응답에는 마스킹된 번호와 만료 시각만 있다.
+  이용자는 본인 휴대폰(<http://127.0.0.1:8000/test-inbox/>)에서 읽는다.
 - 이미지는 **JSON 본문에 base64**로 담는다. 아래 서명 규칙을 그대로 쓸 수 있어서다.
   원본 5MB 상한은 그대로다.
-- **`ci`는 필수**다. 없으면 "휴대폰 명의자와 신분증 명의자가 같다"를 A사가 보장할 수 없다.
 - 다시 제출하면 되는 실패(E01~E05)는 **400** + `reason_code`·`attempts_left`,
   판정이 확정되면(OK·X01·E06) **200** + 웹훅과 같은 결과 본문이다.
+- 실제 구현 예시는 거래소 저장소(`identity-routes.js`·`signup-routes.js`)에 있고,
+  계약이 맞물리는지는 [tools/e2e/rkx_contract.mjs](tools/e2e/README.md)로 확인한다.
+
+> **카메라를 붙여 시연할 때는 `FACE_MATCHER=local`로 띄운다.**
+> 기본값 `fake`는 이미지를 읽지 않고 **파일명으로** 판정하므로, 카메라 앞에 누가 있든
+> 전부 통과한다. `local`은 OpenCV로 실제 검출·대조하고, 쓰려면
+> `uv pip install -r requirements-optional.txt`가 필요하다. AWS에서는 `rekognition`이다.
 - ⒝를 쓰면 **주민등록번호·신분증 사진을 거래소가 직접 수집**하게 된다. 동의 수집과
   안전조치 책임이 거래소로 옮겨가므로 개인정보 처리방침을 함께 손봐야 한다.
 
