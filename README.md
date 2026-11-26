@@ -330,7 +330,9 @@ git diff ops/apache/active.conf   # 지금 어느 상태인지
 | HSTS 헤더 | 있음 | 없음 |
 | http 평문 접속 | 301 → https | 200 (평문 서비스) |
 | 에러 화면에 버전·OS | 없음 | `Apache/2.4.71 (Unix) OpenSSL/3.5.9` |
-| TRACE 메서드 | 405 | 200 |
+| 숨김 파일 `.env` | 403 | 200 (내용 그대로) |
+| TRACE 메서드 | 403 | 200 |
+| PUT 메서드 | 403 | 405 |
 | Server 헤더 | `Apache` | `gunicorn` |
 
 앱 코드 쪽 취약은 `VULN_*` 환경변수로 따로 켠다. 둘은 독립이다.
