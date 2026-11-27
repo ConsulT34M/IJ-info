@@ -13,8 +13,9 @@ cd "$(dirname "$0")/.."
 MODE="good"
 [ "${1:-}" = "--vuln" ] && MODE="vuln"
 
-BASE_HTTPS="https://127.0.0.1:9443"
-BASE_HTTP="http://127.0.0.1:9080"
+# 포트를 .env 에서 바꿨으면 같은 값을 환경변수로 넘긴다(예: WEB_HTTPS_PORT=443 ops/check_web.sh).
+BASE_HTTPS="${CHECK_BASE_HTTPS:-https://127.0.0.1:${WEB_HTTPS_PORT:-9443}}"
+BASE_HTTP="${CHECK_BASE_HTTP:-http://127.0.0.1:${WEB_HTTP_PORT:-9080}}"
 PROBE_FILE="app/static/.ekyc-check.env"
 
 if ! curl -sk -o /dev/null --max-time 3 "$BASE_HTTPS/"; then

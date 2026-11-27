@@ -139,6 +139,10 @@ def init_app_config(app, overrides: dict | None = None) -> None:
         EKYC_ENV=env_name,
         TRUST_PROXY=env_bool("TRUST_PROXY", False),
         TEST_INBOX_ALLOWED_IPS=env_list("TEST_INBOX_ALLOWED_IPS", ["127.0.0.1", "::1"]),
+        # 로컬 시연용 수신함 위젯을 iframe으로 띄울 수 있는 위탁사 화면의 출처(dev 전용)
+        TEST_INBOX_FRAME_ANCESTORS=env_list(
+            "TEST_INBOX_FRAME_ANCESTORS", ["http://localhost:3000", "http://127.0.0.1:3000"]
+        ),
         PUBLIC_BASE_URL=os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:8000"),
         CARRIER_BASE_URL=os.environ.get("CARRIER_BASE_URL", "https://localhost:8443"),
         CARRIER_CA_BUNDLE=os.environ.get("CARRIER_CA_BUNDLE", "carrier/certs/carrier.crt"),
