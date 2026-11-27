@@ -5,7 +5,9 @@
 carrier/certs/carrier.crt(공개 인증서), carrier.key(개인키)를 만든다. 둘 다 커밋하지 않는다.
 A사는 carrier.crt만 신뢰한다(인증서 고정, W-15).
 
-인증서에 넣을 이름은 .env 의 CARRIER_CERT_HOSTS(쉼표 구분, 기본 localhost,127.0.0.1)로 정한다.
+인증서에 넣을 이름은 .env 의 CARRIER_CERT_HOSTS(쉼표 구분)로 정한다. 기본값은 호스트 실행
+(localhost), 컨테이너에서 호스트 통신사 호출(host.docker.internal), compose 통신사 서비스
+(carrier) 세 경우를 모두 담는다.
 A사가 CARRIER_BASE_URL 에 쓰는 호스트 이름이 여기 들어 있어야 TLS 검증을 통과한다.
 """
 
@@ -25,7 +27,7 @@ from cryptography.x509.oid import NameOID
 from app.common import secrets as secret_store
 
 VALID_DAYS = 365
-DEFAULT_CERT_HOSTS = ("localhost", "127.0.0.1")
+DEFAULT_CERT_HOSTS = ("localhost", "127.0.0.1", "host.docker.internal", "carrier")
 
 
 def cert_hosts() -> list[str]:
@@ -43,7 +45,7 @@ def _alt_name(host: str) -> x509.GeneralName:
 
 
 def make_self_signed(cert_path: Path, key_path: Path, hosts: list[str] | None = None) -> None:
-    """자체 서명 인증서를 만든다. hosts가 없으면 localhost / 127.0.0.1용."""
+    """자체 서명 인증서를 만든다. hosts가 없으면 DEFAULT_CERT_HOSTS."""
     hosts = hosts or list(DEFAULT_CERT_HOSTS)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = x509.Name(

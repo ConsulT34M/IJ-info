@@ -331,6 +331,31 @@ open https://localhost:9443    # 자체 서명이라 경고가 뜬다. 진행하
   `host.docker.internal:8443`으로 부른다.
 - `instance/`를 호스트와 공유하므로 `tools/demo_reset.sh` 한 번이면 양쪽 다 선다.
 
+### 서버에 올릴 때 (호스트에 파이썬 없이)
+
+주소·포트·도메인은 `.env`의 "compose 스택" 절에서 바꾼다. 모의 통신사도 컨테이너로 띄우려면
+`.env`에 `COMPOSE_PROFILES=carrier`, `STACK_CARRIER_BASE_URL=https://carrier:8443`을 넣는다.
+
+처음 한 번은 아래 **순서대로** 돌린다. `EKYC_ENV=production`에서는 앱이 시크릿을 스스로 만들지
+않으므로, 시크릿을 만들어 주는 통신사 인증서 생성이 맨 앞이다.
+
+```bash
+mkdir -p instance carrier/certs seed
+cp samples/people.json seed/people.json
+# 컨테이너 사용자(uid 10001)가 쓸 수 있게 한다. 리눅스 서버에서만 필요하다.
+sudo chown -R 10001 instance carrier/certs seed
+
+docker compose build
+docker compose run --rm carrier python -m carrier.make_certs   # 인증서 + 시크릿 파일
+docker compose run --rm app flask --app app db upgrade          # 테이블
+docker compose run --rm app flask --app app seed                # 진위확인 대장·수신함
+docker compose run --rm carrier python -m carrier.seed          # 통신사 명부
+docker compose up -d
+```
+
+고객사는 `docker compose exec app flask --app app create-client ...`로 등록한다.
+등록한 시크릿은 떠 있는 앱이 다음 요청에서 바로 읽는다(재시작하지 않아도 된다).
+
 ### 웹서버 양호/취약 전환
 
 ```bash

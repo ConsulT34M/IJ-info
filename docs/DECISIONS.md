@@ -1296,3 +1296,52 @@ compose 스택과 Apache 설정에 `localhost`·`127.0.0.1`·`9443`이 박혀 �
 - **컨테이너를 띄워서 확인하지 못했다.** compose 렌더링·문법·인증서 생성까지만 봤다.
   pytest도 이 작업 환경에 의존성이 없어 돌리지 못했다. 병합 전에 `docker compose up` 뒤
   `ops/check_web.sh`와 pytest를 한 번 돌린다.
+
+## D101. 서버 배포를 막던 세 가지를 고친다
+
+위탁사(RKX)는 ALB, A사는 Apache, B사(MK)는 IIS로 각각 다른 VM에 올리기로 했다. 그 구성으로
+코드를 다시 읽었더니 A사에서 막히는 곳이 셋 나왔다.
+
+### 1. Referrer-Policy 를 `no-referrer` → `same-origin`
+
+`EKYC_ENV=production`이면 `WTF_CSRF_SSL_STRICT`가 켜지고, Flask-WTF는 https 폼 제출에서
+Referer 헤더가 없으면 400을 낸다. 그런데 앱이 모든 응답에 `no-referrer`를 붙여 브라우저가
+Referer를 보내지 않는다. 관리자 로그인·테스트 수신함·문의 폼이 production에서 전부 막힌다.
+dev에서는 이 검사가 꺼져 있어 드러나지 않았다.
+
+`same-origin`은 같은 출처로만 Referer를 보낸다. 거래소 return_url 같은 다른 출처로는 여전히
+아무것도 나가지 않으므로 주소가 밖으로 새지 않는다. 응답 헤더와 base 템플릿 세 곳의 meta
+태그를 함께 바꿨다.
+
+### 2. 시크릿을 못 찾으면 파일을 한 번 다시 읽는다
+
+떠 있는 앱은 시크릿 파일을 기동할 때 한 번 읽어 캐시한다. `flask create-client`는 다른
+프로세스라 그 캐시를 못 비운다. 그래서 새 고객사의 첫 요청이 `SecretNotFound`로 500이 됐고
+앱을 재시작해야 했다. `get_secret`이 캐시에 없는 이름을 만나면 파일을 한 번 다시 읽는다.
+쓰는 도중이라 파일을 못 읽으면 지금 캐시를 그대로 둔다.
+
+### 3. 모의 통신사를 compose 서비스로도 띄울 수 있게 한다(선택)
+
+지금까지 통신사는 호스트에서 `python -m carrier`로만 띄웠다. 서버에 올리려면 호스트에
+파이썬·가상환경을 따로 깔아야 했다. `carrier` 서비스를 **profile**로 추가했다.
+`COMPOSE_PROFILES=carrier`와 `STACK_CARRIER_BASE_URL=https://carrier:8443`을 넣을 때만 뜬다.
+기본 스택과 호스트 실행 흐름은 그대로다. 호스트로 포트를 열지 않는다.
+
+인증서 기본 이름에 `host.docker.internal`, `carrier`를 더했다. 전에는 `localhost`·`127.0.0.1`뿐이라
+컨테이너에서 부르면 이름이 맞지 않았다. **이미 만든 인증서에는 반영되지 않는다.**
+`carrier/certs/`를 지우고 `python -m carrier.make_certs`를 다시 돌린다.
+
+### 하지 않은 것
+
+- 인증서 발급용 `/.well-known/acme-challenge/` 경로 허용은 넣지 않았다. Apache 설정은
+  `ops/check_web.sh`로 확인한 지시어만 둔다는 규칙(D95)이 있는데, 이 작업 환경에는 Apache가
+  없어 확인할 수 없었다. 발급·갱신은 web 컨테이너를 잠시 내리고 하거나 DNS 방식으로 한다.
+- 계약(API 경로·필드, 서명, 웹훅)과 DB 스키마는 건드리지 않았다.
+
+### 확인한 것과 못 한 것
+
+- 시크릿 테스트(`tests/test_secrets.py`)는 돌렸다. 새 테스트는 고치기 전 코드에서 실패하고
+  고친 뒤 통과한다.
+- compose는 기본·`.env.example`·통신사 profile 세 경우로 렌더링해 봤다.
+- **나머지 pytest와 컨테이너 기동은 이 작업 환경에 의존성·Docker 엔진이 없어 돌리지 못했다.**
+  `Referrer-Policy` 값을 확인하는 테스트 두 개(`test_app.py`, `test_site.py`)는 기대값만 맞춰 뒀다.

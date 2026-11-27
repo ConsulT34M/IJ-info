@@ -15,7 +15,7 @@ def test_security_headers_are_set(client):
     assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
     assert headers["X-Content-Type-Options"] == "nosniff"
     assert headers["X-Frame-Options"] == "DENY"
-    assert headers["Referrer-Policy"] == "no-referrer"
+    assert headers["Referrer-Policy"] == "same-origin"
     assert headers["Cache-Control"] == "no-store"
 
 
