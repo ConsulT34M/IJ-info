@@ -1264,3 +1264,35 @@ CLI와 **같은 엔드포인트, 같은 검사**다.
 테스트 5개 추가(536 → 541). 등록해도 키가 화면에 나오지 않는 것, 등록한 창은 키 없이
 문자를 보는 것, 등록 전에는 여전히 키를 요구하는 것, 명의가 틀리면 세션에 아무것도 남지
 않는 것, CLI의 JSON 계약이 그대로인 것을 고정했다.
+
+## D100. localhost 고정값을 .env 로 뺀다
+
+### 왜
+
+compose 스택과 Apache 설정에 `localhost`·`127.0.0.1`·`9443`이 박혀 있어 AWS에 올리면
+파일을 직접 고쳐야 했다. 위탁사(RKX)·B사(MK)와 서로 다른 VM·도메인으로 붙이려면
+주소가 설정에서 나와야 한다.
+
+### 무엇을 바꿨나
+
+- `docker-compose.yml`: `EKYC_ENV`, 접속 주소, 포트 바인딩, DB 비밀번호, 통신사 주소,
+  수신함 허용 IP를 `.env`에서 읽는다. **값을 넣지 않으면 전과 같은 로컬 값으로 뜬다.**
+- `ops/apache/*.conf`: `ServerName`과 http→https 리다이렉트 주소를
+  `${EKYC_SERVER_NAME}`, `${EKYC_PUBLIC_ORIGIN}`으로 읽는다(web 컨테이너 환경변수).
+- 모의 통신사: 바인딩 주소·포트(`CARRIER_BIND_HOST`, `CARRIER_PORT`)와 인증서에 넣을
+  이름(`CARRIER_CERT_HOSTS`)을 고를 수 있다. 기본은 전과 같다.
+- 수신함 위젯의 `frame-ancestors`(`TEST_INBOX_FRAME_ANCESTORS`).
+
+### compose 전용 변수에 `STACK_`을 붙인 이유
+
+같은 `.env`를 호스트 실행(`flask run`)과 compose가 함께 읽는다. 그런데 접속 주소·통신사
+주소·수신함 허용 IP는 컨테이너 안팎에서 값이 다르다. 이름을 합치면 `.env.example`을
+그대로 복사한 로컬 compose가 깨진다. 그래서 컨테이너 쪽 값만 `STACK_` 접두어로 따로 둔다.
+
+### 남은 것
+
+- 계약(API 경로·필드, 서명, 웹훅)과 DB 스키마는 건드리지 않았다.
+- `VULN_*` 플래그는 여전히 `.env`에서 컨테이너로 넘어가지 않는다. 범위 밖이라 그대로 뒀다.
+- **컨테이너를 띄워서 확인하지 못했다.** compose 렌더링·문법·인증서 생성까지만 봤다.
+  pytest도 이 작업 환경에 의존성이 없어 돌리지 못했다. 병합 전에 `docker compose up` 뒤
+  `ops/check_web.sh`와 pytest를 한 번 돌린다.
