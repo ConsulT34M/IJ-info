@@ -75,8 +75,22 @@ def get_secret(name: str) -> Any:
         return override
     try:
         return load_secrets()[name]
+    except KeyError:
+        pass
+    # 캐시에 없으면 파일을 한 번 다시 읽는다. 떠 있는 앱이 `flask create-client`로
+    # 나중에 추가된 고객사 시크릿을 재시작 없이 찾게 하려는 것이다(D101).
+    try:
+        return _reload_secrets()[name]
     except KeyError as exc:
         raise SecretNotFound(f"시크릿이 없다: {name}") from exc
+
+
+def _reload_secrets() -> dict[str, Any]:
+    """파일을 다시 읽는다. 쓰는 도중이라 읽지 못하면 지금 캐시를 그대로 둔다."""
+    try:
+        return load_secrets(refresh=True)
+    except (OSError, json.JSONDecodeError):
+        return load_secrets()
 
 
 def get_key(name: str) -> bytes:

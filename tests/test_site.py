@@ -47,7 +47,7 @@ def test_public_pages_keep_security_headers(client, path):
     assert "default-src 'self'" in response.headers["Content-Security-Policy"]
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
-    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.headers["Referrer-Policy"] == "same-origin"
 
 
 @pytest.mark.parametrize("path", PUBLIC_PATHS)

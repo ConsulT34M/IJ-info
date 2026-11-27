@@ -114,7 +114,9 @@ def _register_security_headers(app: Flask) -> None:
             response.headers.setdefault("Content-Security-Policy", app.config["CONTENT_SECURITY_POLICY"])
             response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # 같은 출처로만 Referer를 보낸다. no-referrer로 두면 production의 CSRF 검사
+        # (WTF_CSRF_SSL_STRICT)가 Referer를 못 받아 https 폼 제출이 전부 400이 된다(D101).
+        response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cache-Control", "no-store")
         if app.config["EKYC_ENV"] == "production":

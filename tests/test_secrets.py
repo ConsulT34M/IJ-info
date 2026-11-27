@@ -58,3 +58,24 @@ def test_environment_variable_wins(dev_secrets, monkeypatch):
 def test_missing_secret_raises(dev_secrets):
     with pytest.raises(secrets_mod.SecretNotFound):
         secrets_mod.get_secret("ekyc/does-not-exist")
+
+
+def test_secret_added_by_another_process_is_found(dev_secrets):
+    """떠 있는 앱이 캐시를 쥔 뒤 다른 프로세스(flask create-client)가 추가한 시크릿을 찾는다."""
+    secrets_mod.get_secret("ekyc/db")  # 캐시를 채운다
+    path = secrets_mod.secrets_path()
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    stored["ekyc/clients/late/hmac"] = "added-later"
+    path.write_text(json.dumps(stored), encoding="utf-8")  # put_secret을 거치지 않는다
+
+    assert secrets_mod.get_secret("ekyc/clients/late/hmac") == "added-later"
+
+
+def test_half_written_file_keeps_current_cache(dev_secrets):
+    """파일이 쓰는 도중이어도 이미 읽어 둔 시크릿은 그대로 쓴다."""
+    before = secrets_mod.get_secret("ekyc/db")
+    secrets_mod.secrets_path().write_text('{"ekyc/db": ', encoding="utf-8")
+
+    with pytest.raises(secrets_mod.SecretNotFound):
+        secrets_mod.get_secret("ekyc/does-not-exist")
+    assert secrets_mod.get_secret("ekyc/db") == before
