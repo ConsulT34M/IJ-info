@@ -11,10 +11,22 @@ if [ -f "$OUT/web.crt" ] && [ "${1:-}" != "--force" ]; then
   exit 0
 fi
 
+# 인증서 이름은 WEB_SERVER_NAME(환경변수 → .env → localhost 순)에서 읽는다.
+HOST="${WEB_SERVER_NAME:-}"
+if [ -z "$HOST" ] && [ -f .env ]; then
+  HOST="$(grep -E '^WEB_SERVER_NAME=' .env | tail -n 1 | cut -d= -f2- | tr -d '\r"' || true)"
+fi
+HOST="${HOST:-localhost}"
+case "$HOST" in
+  *[!A-Za-z0-9.-]*) echo "WEB_SERVER_NAME 형식이 올바르지 않다: $HOST" >&2; exit 2 ;;
+esac
+SAN="DNS:localhost,IP:127.0.0.1"
+[ "$HOST" = "localhost" ] || SAN="DNS:$HOST,$SAN"
+
 openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
   -keyout "$OUT/web.key" -out "$OUT/web.crt" \
-  -subj "/C=KR/O=ij-info-lab/CN=localhost" \
-  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
+  -subj "/C=KR/O=ij-info-lab/CN=$HOST" \
+  -addext "subjectAltName=$SAN" 2>/dev/null
 
 chmod 600 "$OUT/web.key"
 chmod 644 "$OUT/web.crt"

@@ -106,7 +106,8 @@ def _register_security_headers(app: Flask) -> None:
         if local_widget:
             # 인증번호는 IJ-info의 등록된 기기 세션에만 보이고, RKX는 iframe 내용을 읽지 못한다.
             response.headers["Content-Security-Policy"] = app.config["CONTENT_SECURITY_POLICY"].replace(
-                "frame-ancestors 'none'", "frame-ancestors http://localhost:3000 http://127.0.0.1:3000"
+                "frame-ancestors 'none'",
+                "frame-ancestors " + " ".join(app.config["TEST_INBOX_FRAME_ANCESTORS"]),
             )
             response.headers.pop("X-Frame-Options", None)
         else:
